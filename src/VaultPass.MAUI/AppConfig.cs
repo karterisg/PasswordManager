@@ -13,9 +13,9 @@ public static class AppConfig
 #if ANDROID
     // Android Emulator: 10.0.2.2 resolves to the host PC's localhost.
     // If testing on a physical device, replace with the PC's LAN IP (e.g. 192.168.1.100).
-    public const string ApiBaseUrl = "http://10.0.2.2:7012/";
+    public const string ApiBaseUrl = "http://10.0.2.2:5243/";
 #else
     // Windows / iOS Simulator: app and API are on the same machine.
-    public const string ApiBaseUrl = "http://localhost:7012/";
+    public const string ApiBaseUrl = "http://localhost:5243/";
 #endif
 }
