@@ -1,0 +1,103 @@
+@* Login page — nearly identical to VaultPass.Web/Pages/Login.razor.
+   The only MAUI-specific change is the storage service:
+     Web:  @inject LocalStorageService LocalStorage  (uses browser localStorage via JS interop)
+     MAUI: @inject SecureStorageService Storage      (uses OS keychain / Android Keystore)
+   Everything else — HTML, CSS classes, password hashing, JWT parsing — is unchanged. *@
+
+@page "/login"
+@inject AuthService AuthService
+@inject SecureStorageService Storage
+@inject NavigationManager Navigation
+
+<div class="auth-page">
+    <div class="auth-card">
+        <div class="auth-logo">
+            <div class="auth-logo-icon">🔐</div>
+            <h1>VaultPass</h1>
+        </div>
+        <h2>Welcome back</h2>
+        <p class="auth-subtitle">Sign in to your vault</p>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="alert-error">@_error</div>
+        }
+
+        <div class="form-group">
+            <label>Email</label>
+            <input class="form-control" type="email" placeholder="you@example.com" @bind="_email" />
+        </div>
+        <div class="form-group">
+            <label>Master Password</label>
+            <input class="form-control" type="password" placeholder="••••••••" @bind="_password" />
+        </div>
+        <button class="btn btn-primary" @onclick="HandleLogin">Sign In</button>
+
+        <p class="auth-footer">Don't have an account? <a href="/register">Create one</a></p>
+    </div>
+</div>
+
+@code {
+    private string _email = "";
+    private string _password = "";
+    private string _error = "";
+
+    private async Task HandleLogin()
+    {
+        _error = "";
+        // Hash the password client-side before sending to the API.
+        // The API never sees the plain-text master password.
+        var hash = ComputeSha256(_password);
+        var token = await AuthService.LoginAsync(_email, hash);
+
+        if (token is null)
+        {
+            _error = "Invalid email or password.";
+            return;
+        }
+
+        // Store the JWT in the OS keychain (persists across app restarts)
+        await Storage.SetAsync("token", token);
+
+        // Derive the AES encryption key from the password hash + vault ID and
+        // store it in memory only (session storage — never written to disk)
+        var vaultId = ParseVaultIdFromToken(token);
+        if (vaultId != Guid.Empty)
+        {
+            var encKeyBase64 = EncryptionService.DeriveKeyBase64(hash, vaultId.ToString());
+            await Storage.SetSessionAsync("enc_key", encKeyBase64);
+        }
+
+        Navigation.NavigateTo("/dashboard");
+    }
+
+    // Decodes the JWT payload (Base64url) and extracts the vaultId claim.
+    // No JWT library needed — we only need one field from the payload.
+    private static Guid ParseVaultIdFromToken(string token)
+    {
+        try
+        {
+            var parts = token.Split('.');
+            if (parts.Length != 3) return Guid.Empty;
+            var payload = parts[1].Replace('-', '+').Replace('_', '/');
+            switch (payload.Length % 4)
+            {
+                case 2: payload += "=="; break;
+                case 3: payload += "="; break;
+            }
+            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("vaultId", out var prop))
+                return Guid.Parse(prop.GetString()!);
+            return Guid.Empty;
+        }
+        catch { return Guid.Empty; }
+    }
+
+    private static string ComputeSha256(string input)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(bytes).ToLower();
+    }
+}

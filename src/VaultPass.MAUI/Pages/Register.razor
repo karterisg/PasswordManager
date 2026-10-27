@@ -1,0 +1,69 @@
+@* Registration page — identical to VaultPass.Web/Pages/Register.razor.
+   No storage interaction here (we redirect to login after success),
+   so there is no difference between the Web and MAUI versions of this file. *@
+
+@page "/register"
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<div class="auth-page">
+    <div class="auth-card">
+        <div class="auth-logo">
+            <div class="auth-logo-icon">🔐</div>
+            <h1>VaultPass</h1>
+        </div>
+        <h2>Create account</h2>
+        <p class="auth-subtitle">Start securing your passwords</p>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="alert-error">@_error</div>
+        }
+
+        <div class="form-group">
+            <label>Name</label>
+            <input class="form-control" type="text" placeholder="Your name" @bind="_displayName" />
+        </div>
+        <div class="form-group">
+            <label>Email</label>
+            <input class="form-control" type="email" placeholder="you@example.com" @bind="_email" />
+        </div>
+        <div class="form-group">
+            <label>Master Password</label>
+            <input class="form-control" type="password" placeholder="••••••••" @bind="_password" />
+        </div>
+        <button class="btn btn-primary" @onclick="HandleRegister">Create Account</button>
+
+        <p class="auth-footer">Already have an account? <a href="/login">Sign in</a></p>
+    </div>
+</div>
+
+@code {
+    private string _displayName = "";
+    private string _email = "";
+    private string _password = "";
+    private string _error = "";
+
+    private async Task HandleRegister()
+    {
+        _error = "";
+        // Hash password before sending — same as the Web project
+        var hash = ComputeSha256(_password);
+        var success = await AuthService.RegisterAsync(_email, _displayName, hash);
+
+        if (!success)
+        {
+            _error = "Failed to register!! Please try again.";
+            return;
+        }
+
+        Navigation.NavigateTo("/login");
+    }
+
+    private static string ComputeSha256(string input)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(bytes).ToLower();
+    }
+}

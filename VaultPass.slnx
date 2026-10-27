@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VaultPass.API/VaultPass.API.csproj" />
+    <Project Path="src/VaultPass.Application/VaultPass.Application.csproj" />
+    <Project Path="src/VaultPass.Domain/VaultPass.Domain.csproj" />
+    <Project Path="src/VaultPass.Infrastructure/VaultPass.Infrastructure.csproj" />
+    <Project Path="src/VaultPass.MAUI/VaultPass.MAUI.csproj" />
+    <Project Path="src/VaultPass.Web/VaultPass.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/VaultPass.IntegrationTests/VaultPass.IntegrationTests.csproj" />
+    <Project Path="tests/VaultPass.UnitTests/VaultPass.UnitTests.csproj" />
+  </Folder>
+</Solution>

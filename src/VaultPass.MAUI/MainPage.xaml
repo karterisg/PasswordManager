@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    This is the only XAML page that matters in our project.
+    XAML is MAUI's markup language (think of it like HTML but for native UI).
+
+    We place a single BlazorWebView here. This is a native control that can render
+    Blazor/HTML content inside a native app window — it is the entire point of
+    a Blazor Hybrid app. The web content is NOT running in a browser; it runs
+    in an embedded WebView control provided by the OS (WinUI on Windows, WebKit on iOS/Mac,
+    Chromium on Android).
+
+    HostPage: the HTML file used as the entry point (our wwwroot/index.html).
+    RootComponent: the Blazor component that mounts inside <div id="app"> in that HTML.
+-->
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:VaultPass.MAUI"
+             x:Class="VaultPass.MAUI.MainPage"
+             BackgroundColor="#f5f5f7">
+
+    <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html">
+        <BlazorWebView.RootComponents>
+            <!-- Mount Routes.razor into the #app div — same as a normal Blazor app -->
+            <RootComponent Selector="#app" ComponentType="{x:Type local:Routes}" />
+        </BlazorWebView.RootComponents>
+    </BlazorWebView>
+
+</ContentPage>

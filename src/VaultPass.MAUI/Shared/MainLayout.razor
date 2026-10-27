@@ -1,0 +1,10 @@
+@* The layout component — the shell that wraps every page.
+   Each @page component is rendered where @Body appears.
+
+   We keep this intentionally minimal: no global navigation bar or sidebar.
+   Each individual page (Login, Dashboard) manages its own header and layout,
+   so the layout just passes content straight through. *@
+
+@inherits LayoutComponentBase
+
+@Body

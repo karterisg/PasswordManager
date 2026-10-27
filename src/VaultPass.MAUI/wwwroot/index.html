@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <!--
+        viewport-fit=cover is important on iOS: it tells the WebView to extend
+        into the safe area (notch / home indicator) so the UI fills the full screen.
+        user-scalable=no prevents the pinch-to-zoom gesture on mobile.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0,
+          maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>VaultPass</title>
+    <base href="/" />
+    <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+    <!-- Blazor mounts the Routes component here (configured in MainPage.xaml) -->
+    <div id="app">Loading...</div>
+
+    <!-- Shown by Blazor if an unhandled exception crashes the circuit -->
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+
+    <!-- Our AES-GCM encrypt/decrypt helpers using the browser's WebCrypto API -->
+    <script src="js/vault-crypto.js"></script>
+
+    <!--
+        blazor.webview.js (NOT blazor.webassembly.js or blazor.server.js).
+        This is the Blazor Hybrid script — it wires Blazor to the native WebView
+        instead of running in a browser or on a server.
+        autostart="false" lets us call Blazor.start() manually below.
+    -->
+    <script src="_framework/blazor.webview.js" autostart="false"></script>
+</body>
+</html>

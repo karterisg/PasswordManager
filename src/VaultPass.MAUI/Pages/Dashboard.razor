@@ -1,0 +1,278 @@
+@* Dashboard — nearly identical to VaultPass.Web/Pages/Dashboard.razor.
+   MAUI-specific changes:
+     1. @inject SecureStorageService Storage  (instead of LocalStorageService LocalStorage)
+     2. All calls to LocalStorage.* are renamed to Storage.*
+   Everything else — layout, encryption, copy-to-clipboard, delete — is unchanged.
+
+   AES-GCM encryption/decryption is done via JS interop (vault-crypto.js) because
+   the BlazorWebView has a full WebCrypto API available, just like a browser. *@
+
+@page "/dashboard"
+@inject VaultItemService VaultItemService
+@inject SecureStorageService Storage
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div class="dashboard">
+    <div class="topbar">
+        <div class="topbar-brand">
+            <div class="topbar-brand-icon">🔐</div>
+            VaultPass
+        </div>
+        <button type="button" class="btn btn-secondary" @onclick="Logout">Sign Out</button>
+    </div>
+
+    <div class="dashboard-content">
+        <div class="section-header">
+            <h2>My Vault</h2>
+            <button type="button" class="btn btn-primary" style="width:auto" @onclick="OpenModal">+ Add Password</button>
+        </div>
+
+        @if (_loading)
+        {
+            <p style="color: var(--text-secondary)">Loading...</p>
+        }
+        else if (_items.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-state-icon">🔑</div>
+                <h3>No saved passwords yet</h3>
+                <p>Click "Add Password" to save your first one.</p>
+            </div>
+        }
+        else
+        {
+            <div class="vault-list">
+                @foreach (var item in _items)
+                {
+                    var itemId = item.Id;
+                    <div class="vault-item">
+                        <div class="vault-item-icon">🌐</div>
+                        <div class="vault-item-info">
+                            <div class="vault-item-name">@item.Name</div>
+                            @if (!string.IsNullOrEmpty(item.WebsiteUrl))
+                            {
+                                <div class="vault-item-url">@item.WebsiteUrl</div>
+                            }
+                            @if (_revealedItems.Contains(itemId) && _decryptedPasswords.TryGetValue(itemId, out var pwd))
+                            {
+                                <div class="vault-item-password">@pwd</div>
+                            }
+                        </div>
+                        <div class="vault-item-actions">
+                            <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
+                                    @onclick="() => ToggleReveal(itemId, item.EncryptedData)">
+                                @(_revealedItems.Contains(itemId) ? "Hide" : "Show")
+                            </button>
+                            <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
+                                    @onclick="() => CopyPassword(itemId, item.EncryptedData)">
+                                @(_copiedId == itemId ? "✓ Copied" : "Copy")
+                            </button>
+                            <button type="button" class="btn btn-danger" @onclick="() => DeleteItem(itemId)">Delete</button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@if (_showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal" @onclick:stopPropagation="true">
+            <h3>Add Password</h3>
+            @if (!string.IsNullOrEmpty(_addError))
+            {
+                <div class="alert-error">@_addError</div>
+            }
+            <div class="form-group">
+                <label>Name</label>
+                <input class="form-control" placeholder="e.g. Gmail" @bind="_newName" />
+            </div>
+            <div class="form-group">
+                <label>Website URL</label>
+                <input class="form-control" placeholder="https://gmail.com" @bind="_newUrl" />
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input class="form-control" type="password" placeholder="••••••••" @bind="_newPassword" />
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button type="button" class="btn btn-primary" style="width:auto" @onclick="AddItem">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<VaultItemModel> _items = [];
+    private bool _loading = true;
+    private bool _showModal = false;
+    private Guid _vaultId;
+    private string? _encKeyBase64;
+
+    private string _newName = "";
+    private string _newUrl = "";
+    private string _newPassword = "";
+    private string _addError = "";
+
+    private HashSet<Guid> _revealedItems = [];
+    private Dictionary<Guid, string> _decryptedPasswords = [];
+    private Guid _copiedId = Guid.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Read token from OS keychain (set during login)
+        var token = await Storage.GetAsync("token");
+        if (token is null) { Navigation.NavigateTo("/login"); return; }
+
+        _vaultId = ParseVaultIdFromToken(token);
+        if (_vaultId == Guid.Empty) { Navigation.NavigateTo("/login"); return; }
+
+        // Read the AES key from in-memory session storage (set during login)
+        _encKeyBase64 = await Storage.GetSessionAsync("enc_key");
+
+        try
+        {
+            _items = await VaultItemService.GetItemsAsync(_vaultId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[LOAD ERROR] {ex.Message}");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OpenModal()
+    {
+        _newName = "";
+        _newUrl = "";
+        _newPassword = "";
+        _addError = "";
+        _showModal = true;
+    }
+
+    private void CloseModal() => _showModal = false;
+
+    private async Task AddItem()
+    {
+        _addError = "";
+        if (string.IsNullOrWhiteSpace(_newName)) { _addError = "Name is required."; return; }
+        if (string.IsNullOrWhiteSpace(_newPassword)) { _addError = "Password is required."; return; }
+
+        try
+        {
+            // Encrypt password in JS via WebCrypto API before sending to the server
+            var encryptedData = await EncryptAsync(_newPassword);
+
+            var request = new CreateVaultItemRequest(
+                VaultId: _vaultId,
+                Name: _newName,
+                Type: 1,
+                EncryptedData: encryptedData,
+                WebsiteUrl: string.IsNullOrEmpty(_newUrl) ? null : _newUrl
+            );
+
+            var success = await VaultItemService.CreateItemAsync(request);
+            if (success)
+            {
+                _showModal = false;
+                _items = await VaultItemService.GetItemsAsync(_vaultId);
+            }
+            else
+            {
+                _addError = "Failed to save. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _addError = "Error: " + ex.Message;
+            Console.WriteLine($"[ADD ERROR] {ex.Message}");
+        }
+    }
+
+    // Calls vaultCrypto.encrypt() in vault-crypto.js using the WebCrypto API
+    private async Task<string> EncryptAsync(string plaintext)
+    {
+        if (_encKeyBase64 is null) return plaintext;
+        return await JS.InvokeAsync<string>("vaultCrypto.encrypt", _encKeyBase64, plaintext);
+    }
+
+    // Calls vaultCrypto.decrypt() in vault-crypto.js
+    private async Task<string> DecryptAsync(string encryptedData)
+    {
+        if (_encKeyBase64 is null) return encryptedData;
+        try { return await JS.InvokeAsync<string>("vaultCrypto.decrypt", _encKeyBase64, encryptedData); }
+        catch { return encryptedData; }
+    }
+
+    private async Task ToggleReveal(Guid id, string encryptedData)
+    {
+        if (_revealedItems.Contains(id))
+        {
+            _revealedItems.Remove(id);
+        }
+        else
+        {
+            // Decrypt once and cache the result so we don't call JS on every render
+            if (!_decryptedPasswords.ContainsKey(id))
+                _decryptedPasswords[id] = await DecryptAsync(encryptedData);
+            _revealedItems.Add(id);
+        }
+    }
+
+    private async Task CopyPassword(Guid itemId, string encryptedData)
+    {
+        var plain = _decryptedPasswords.TryGetValue(itemId, out var cached)
+            ? cached
+            : await DecryptAsync(encryptedData);
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", plain); } catch { }
+        _copiedId = itemId;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _copiedId = Guid.Empty;
+        StateHasChanged();
+    }
+
+    private static Guid ParseVaultIdFromToken(string token)
+    {
+        try
+        {
+            var parts = token.Split('.');
+            if (parts.Length != 3) return Guid.Empty;
+            var payload = parts[1].Replace('-', '+').Replace('_', '/');
+            switch (payload.Length % 4)
+            {
+                case 2: payload += "=="; break;
+                case 3: payload += "="; break;
+            }
+            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("vaultId", out var vaultIdProp))
+                return Guid.Parse(vaultIdProp.GetString()!);
+            return Guid.Empty;
+        }
+        catch { return Guid.Empty; }
+    }
+
+    private async Task DeleteItem(Guid id)
+    {
+        _revealedItems.Remove(id);
+        _decryptedPasswords.Remove(id);
+        await VaultItemService.DeleteItemAsync(id);
+        _items = await VaultItemService.GetItemsAsync(_vaultId);
+    }
+
+    private async Task Logout()
+    {
+        // Clear token from keychain and encryption key from memory
+        await Storage.RemoveAsync("token");
+        await Storage.RemoveSessionAsync("enc_key");
+        Navigation.NavigateTo("/login");
+    }
+}

@@ -1,0 +1,18 @@
+@page "/"
+@inject SecureStorageService Storage
+@inject NavigationManager Navigation
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var token = await Storage.GetAsync("token");
+            Navigation.NavigateTo(token is not null ? "/dashboard" : "/login", replace: true);
+        }
+        catch
+        {
+            Navigation.NavigateTo("/login", replace: true);
+        }
+    }
+}
