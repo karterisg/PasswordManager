@@ -15,6 +15,7 @@ public class VaultItem : BaseEntity
     //no encryption in this field — we need it for display purposes
     public string? WebsiteUrl { get; private set; }
     public bool IsFavorite { get; private set; }
+    public bool IsHiddenInTravelMode { get; private set; }
     public DateTime? LastAccessedAt { get; private set; }
     public Guid? TemplateId { get; private set; }
 
@@ -57,6 +58,12 @@ public class VaultItem : BaseEntity
     public void ToggleFavorite()
     {
         IsFavorite = !IsFavorite;
+        SetUpdated();
+    }
+
+    public void SetHiddenInTravelMode(bool hidden)
+    {
+        IsHiddenInTravelMode = hidden;
         SetUpdated();
     }
 

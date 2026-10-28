@@ -1,0 +1,79 @@
+@page "/shared/{Token}"
+@using System.Net.Http.Json
+@using System.Text.Json
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<div class="auth-page">
+    <div class="auth-card" style="max-width:480px">
+        <div class="auth-logo"><img src="favicon.png" style="width:56px;height:56px;object-fit:contain" /></div>
+        <h2 style="text-align:center;margin-bottom:8px">Shared Item</h2>
+        <p style="text-align:center;color:var(--text-secondary);font-size:13px;margin-bottom:24px">
+            This item was shared with you via VaultPass
+        </p>
+
+        @if (_loading)
+        {
+            <p style="text-align:center;color:var(--text-secondary)">Loading...</p>
+        }
+        else if (_notFound)
+        {
+            <div class="alert-error">This link is invalid or has expired.</div>
+        }
+        else if (_item is not null)
+        {
+            <div style="background:var(--bg);border-radius:var(--radius);padding:20px">
+                <div style="font-weight:600;font-size:16px;margin-bottom:12px">@_item.Name</div>
+                @foreach (var kv in _fields)
+                {
+                    <div style="margin-bottom:10px">
+                        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-secondary);margin-bottom:2px">@kv.Key</div>
+                        <div style="font-family:monospace;font-size:14px;background:var(--surface);padding:8px 12px;border-radius:8px;border:1px solid var(--border)">@kv.Value</div>
+                    </div>
+                }
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:16px">
+                    Expires: @_item.ExpiresAt.ToLocalTime().ToString("g")
+                </div>
+            </div>
+            <p style="text-align:center;font-size:12px;color:var(--text-secondary);margin-top:20px">
+                Note: Encrypted values are shown as-is. The sender's encryption key is required to decrypt them.
+            </p>
+        }
+
+        <div style="text-align:center;margin-top:20px">
+            <a href="/" style="color:var(--accent);font-size:13px">Get VaultPass</a>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Token { get; set; } = "";
+
+    private bool _loading = true;
+    private bool _notFound = false;
+    private SharedItemResult? _item;
+    private Dictionary<string, string> _fields = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _item = await Http.GetFromJsonAsync<SharedItemResult>($"api/share/{Token}");
+            if (_item is null) { _notFound = true; return; }
+
+            try
+            {
+                var parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(_item.EncryptedData);
+                _fields = parsed ?? new Dictionary<string, string> { ["Data"] = _item.EncryptedData };
+            }
+            catch { _fields = new Dictionary<string, string> { ["Data"] = _item.EncryptedData }; }
+        }
+        catch
+        {
+            _notFound = true;
+        }
+        finally { _loading = false; }
+    }
+
+    private record SharedItemResult(Guid VaultItemId, string EncryptedData, string Name, DateTime ExpiresAt);
+}

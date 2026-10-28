@@ -14,11 +14,21 @@ public class VaultItemRepository : IVaultItemRepository
     public async Task<VaultItem?> GetByIdAsync(Guid id, CancellationToken ct = default)
         => await _context.VaultItems.FindAsync([id], ct);
 
-    public async Task<IEnumerable<VaultItem>> GetByVaultIdAsync(Guid vaultId, CancellationToken ct = default)
+    public async Task<List<VaultItem>> GetByVaultIdAsync(Guid vaultId, CancellationToken ct = default)
         => await _context.VaultItems
             .Where(i => i.VaultId == vaultId)
             .OrderBy(i => i.Name)
             .ToListAsync(ct);
+
+    public async Task<List<VaultItemHistory>> GetHistoryAsync(Guid vaultItemId, CancellationToken ct = default)
+        => await _context.VaultItemHistories
+            .Where(h => h.VaultItemId == vaultItemId)
+            .OrderByDescending(h => h.CreatedAt)
+            .Take(10)
+            .ToListAsync(ct);
+
+    public async Task AddHistoryAsync(VaultItemHistory history, CancellationToken ct = default)
+        => await _context.VaultItemHistories.AddAsync(history, ct);
 
     public async Task AddAsync(VaultItem item, CancellationToken ct = default)
         => await _context.VaultItems.AddAsync(item, ct);

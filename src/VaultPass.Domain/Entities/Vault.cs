@@ -8,6 +8,7 @@ public class Vault : BaseEntity
     public string Name { get; private set; } = string.Empty;
     public bool IsPersonal { get; private set; }
     public Guid OwnerId { get; private set; }
+    public bool TravelModeEnabled { get; private set; }
 
     private readonly List<VaultItem> _items = new();
     public IReadOnlyCollection<VaultItem> Items => _items.AsReadOnly();
@@ -40,6 +41,12 @@ public class Vault : BaseEntity
             throw new InvalidOperationException("Item already exists in this vault.");
 
         _items.Add(item);
+        SetUpdated();
+    }
+
+    public void SetTravelMode(bool enabled)
+    {
+        TravelModeEnabled = enabled;
         SetUpdated();
     }
 

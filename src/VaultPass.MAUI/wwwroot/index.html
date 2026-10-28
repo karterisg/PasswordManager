@@ -24,8 +24,15 @@
         <span class="dismiss">🗙</span>
     </div>
 
-    <!-- Our AES-GCM encrypt/decrypt helpers using the browser's WebCrypto API -->
     <script src="js/vault-crypto.js"></script>
+    <script>
+        function downloadFile(filename, content) {
+            const a = document.createElement('a');
+            a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(content);
+            a.download = filename;
+            a.click();
+        }
+    </script>
 
     <!--
         blazor.webview.js (NOT blazor.webassembly.js or blazor.server.js).

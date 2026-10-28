@@ -6,4 +6,5 @@ public record UpdateVaultItemCommand(
     Guid Id,
     string Name,
     string EncryptedData,
-    string? WebsiteUrl) : IRequest;
+    string? WebsiteUrl,
+    Guid CallerVaultId = default) : IRequest;

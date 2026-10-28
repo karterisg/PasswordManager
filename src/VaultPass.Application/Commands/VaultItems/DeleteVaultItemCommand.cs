@@ -2,4 +2,4 @@
 
 namespace VaultPass.Application.Commands.VaultItems;
 
-public record DeleteVaultItemCommand(Guid Id) : IRequest;
+public record DeleteVaultItemCommand(Guid Id, Guid CallerVaultId) : IRequest;

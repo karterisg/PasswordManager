@@ -57,13 +57,8 @@ body {
 .auth-logo-icon {
     width: 40px;
     height: 40px;
-    background: var(--accent);
     border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 20px;
+    display: block;
 }
 
 .auth-logo h1 {
@@ -219,13 +214,11 @@ body {
 .topbar-brand-icon {
     width: 28px;
     height: 28px;
-    background: var(--accent);
     border-radius: 7px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
-    font-size: 14px;
+    overflow: hidden;
 }
 
 .dashboard-content {
@@ -247,6 +240,40 @@ body {
         font-weight: 700;
         letter-spacing: -0.2px;
     }
+
+.vault-group {
+    margin-bottom: 24px;
+}
+
+.vault-group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 0 2px;
+}
+
+.vault-group-icon {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.vault-group-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.vault-group-count {
+    font-size: 11px;
+    background: var(--border);
+    color: var(--text-secondary);
+    border-radius: 20px;
+    padding: 1px 7px;
+    font-weight: 600;
+}
 
 .vault-list {
     display: flex;
@@ -337,17 +364,31 @@ body {
 }
 
 .modal {
-    display: block;
+    display: flex;
+    flex-direction: column;
     position: relative;
-    height: auto;
-    overflow: visible;
+    max-height: 90vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     background: var(--surface);
     border-radius: var(--radius);
     box-shadow: 0 20px 60px rgba(0,0,0,0.15);
     padding: 32px;
     width: 100%;
     max-width: 440px;
-    z-index: auto;
+}
+
+@media (max-width: 600px) {
+    .modal-overlay {
+        align-items: flex-end;
+        padding: 0;
+    }
+    .modal {
+        max-width: 100%;
+        max-height: 92vh;
+        border-radius: var(--radius) var(--radius) 0 0;
+        padding: 20px 16px;
+    }
 }
 
     .modal h3 {
@@ -377,6 +418,53 @@ body {
     margin-top: 4px;
     word-break: break-all;
 }
+
+.vault-item-fields {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.vault-item-field {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-family: monospace;
+    word-break: break-all;
+}
+
+.field-label {
+    color: var(--text-secondary);
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 4px;
+}
+
+.travel-hidden {
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+.security-card {
+    background: var(--bg);
+    border-radius: var(--radius);
+    padding: 16px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.security-score {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.security-score.good { color: var(--success); }
+.security-score.warn { color: #f59e0b; }
+.security-score.bad  { color: var(--danger); }
 
 #blazor-error-ui {
     background: #fff3cd;

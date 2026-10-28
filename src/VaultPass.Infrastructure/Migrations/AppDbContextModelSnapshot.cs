@@ -131,6 +131,42 @@ namespace VaultPass.Infrastructure.Migrations
                     b.ToTable("ItemTemplateFields");
                 });
 
+            modelBuilder.Entity("VaultPass.Domain.Entities.SharedItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsRevoked")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("MaxUses")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ShareToken")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UsedCount")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("VaultItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SharedItems");
+                });
+
             modelBuilder.Entity("VaultPass.Domain.Entities.Team", b =>
                 {
                     b.Property<Guid>("Id")
@@ -248,6 +284,9 @@ namespace VaultPass.Infrastructure.Migrations
                     b.Property<Guid>("OwnerId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<bool>("TravelModeEnabled")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -270,6 +309,9 @@ namespace VaultPass.Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsFavorite")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsHiddenInTravelMode")
                         .HasColumnType("bit");
 
                     b.Property<DateTime?>("LastAccessedAt")
@@ -301,6 +343,30 @@ namespace VaultPass.Infrastructure.Migrations
                     b.HasIndex("VaultId");
 
                     b.ToTable("VaultItems");
+                });
+
+            modelBuilder.Entity("VaultPass.Domain.Entities.VaultItemHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EncryptedData")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("VaultItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("VaultItemHistories");
                 });
 
             modelBuilder.Entity("VaultPass.Domain.Entities.ItemTemplateField", b =>

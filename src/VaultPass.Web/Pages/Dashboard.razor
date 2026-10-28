@@ -1,6 +1,7 @@
 ﻿@page "/dashboard"
 @using VaultPass.Web.Services
 @using VaultPass.Web.Models
+@using System.Text.Json
 @inject VaultItemService VaultItemService
 @inject LocalStorageService LocalStorage
 @inject NavigationManager Navigation
@@ -9,72 +10,139 @@
 <div class="dashboard">
     <div class="topbar">
         <div class="topbar-brand">
-            <div class="topbar-brand-icon">🔐</div>
+            <div class="topbar-brand-icon"><img src="favicon.png" style="width:100%;height:100%;object-fit:contain" /></div>
             VaultPass
         </div>
-        <button type="button" class="btn btn-secondary" @onclick="Logout">Sign Out</button>
+        <div style="display:flex;gap:8px;align-items:center">
+            @if (_travelMode)
+            {
+                <span style="font-size:12px;background:#f59e0b;color:#fff;padding:3px 10px;border-radius:20px;font-weight:600">✈ Travel Mode</span>
+            }
+            <button type="button" class="btn btn-secondary" @onclick="ToggleTravelMode" title="Travel Mode">✈</button>
+            <button type="button" class="btn btn-secondary" @onclick="OpenSecurityModal" title="Security Dashboard">🛡</button>
+            <button type="button" class="btn btn-secondary" @onclick="ExportVault" title="Export">⬇ Export</button>
+            <button type="button" class="btn btn-secondary" @onclick="() => _showImportModal = true" title="Import">⬆ Import</button>
+            <button type="button" class="btn btn-secondary" @onclick="Logout">Sign Out</button>
+        </div>
     </div>
 
     <div class="dashboard-content">
         <div class="section-header">
             <h2>My Vault</h2>
-            <button type="button" class="btn btn-primary" style="width:auto" @onclick="OpenModal">+ Add Password</button>
+            <button type="button" class="btn btn-primary" style="width:auto" @onclick="OpenAddModal">+ Add Item</button>
         </div>
+
+        @if (!string.IsNullOrEmpty(_globalError))
+        {
+            <div class="alert-error">@_globalError</div>
+        }
 
         @if (_loading)
         {
             <p style="color: var(--text-secondary)">Loading...</p>
         }
-        else if (_items.Count == 0)
+        else if (_visibleItems.Count == 0)
         {
             <div class="empty-state">
                 <div class="empty-state-icon">🔑</div>
-                <h3>No saved passwords yet</h3>
-                <p>Click "Add Password" to save your first one.</p>
+                <h3>No saved items yet</h3>
+                <p>Click "+ Add Item" to save your first one.</p>
             </div>
         }
         else
         {
-            <div class="vault-list">
-                @foreach (var item in _items)
-                {
-                    var itemId = item.Id;
-                    <div class="vault-item">
-                        <div class="vault-item-icon">🌐</div>
-                        <div class="vault-item-info">
-                            <div class="vault-item-name">@item.Name</div>
-                            @if (!string.IsNullOrEmpty(item.WebsiteUrl))
-                            {
-                                <div class="vault-item-url">@item.WebsiteUrl</div>
-                            }
-                            @if (_revealedItems.Contains(itemId) && _decryptedPasswords.TryGetValue(itemId, out var pwd))
-                            {
-                                <div class="vault-item-password">@pwd</div>
-                            }
-                        </div>
-                        <div class="vault-item-actions">
-                            <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
-                                    @onclick="() => ToggleReveal(itemId, item.EncryptedData)">
-                                @(_revealedItems.Contains(itemId) ? "Hide" : "Show")
-                            </button>
-                            <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
-                                    @onclick="() => CopyPassword(itemId, item.EncryptedData)">
-                                @(_copiedId == itemId ? "✓ Copied" : "Copy")
-                            </button>
-                            <button type="button" class="btn btn-danger" @onclick="() => DeleteItem(itemId)">Delete</button>
-                        </div>
+            @foreach (var group in GetGroupedItems())
+            {
+                <div class="vault-group">
+                    <div class="vault-group-header">
+                        <span class="vault-group-icon">@group.Icon</span>
+                        <span class="vault-group-name">@group.Name</span>
+                        <span class="vault-group-count">@group.Items.Count</span>
                     </div>
-                }
-            </div>
+                    <div class="vault-list">
+                        @foreach (var item in group.Items)
+                        {
+                            var itemId = item.Id;
+                            <div class="vault-item @(item.IsHiddenInTravelMode && _travelMode ? "travel-hidden" : "")">
+                                <div class="vault-item-icon">@GetItemIcon(item)</div>
+                                <div class="vault-item-info">
+                                    <div class="vault-item-name">@item.Name</div>
+                                    @if (!string.IsNullOrEmpty(item.WebsiteUrl))
+                                    {
+                                        <div class="vault-item-url">@item.WebsiteUrl</div>
+                                    }
+                                    @if (_revealedItems.Contains(itemId) && _decryptedFields.TryGetValue(itemId, out var fields))
+                                    {
+                                        <div class="vault-item-fields">
+                                            @foreach (var kv in fields)
+                                            {
+                                                <div class="vault-item-field"><span class="field-label">@kv.Key:</span> @kv.Value</div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                                <div class="vault-item-actions">
+                                    <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
+                                            @onclick="() => ToggleReveal(itemId, item.EncryptedData)">
+                                        @(_revealedItems.Contains(itemId) ? "Hide" : "Show")
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
+                                            @onclick="() => CopyFirst(itemId, item.EncryptedData)">
+                                        @(_copiedId == itemId ? "✓" : "Copy")
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
+                                            @onclick="() => OpenEditModal(item)">Edit</button>
+                                    <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
+                                            @onclick="() => OpenHistoryModal(itemId)">🕐</button>
+                                    <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
+                                            @onclick="() => ShareItem(itemId)">
+                                        @(_sharedTokens.TryGetValue(itemId, out var tok) ? "📋 Copied!" : "Share")
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
+                                            @onclick="() => ToggleItemTravelHidden(item)">
+                                        @(item.IsHiddenInTravelMode ? "✈🔒" : "✈")
+                                    </button>
+                                    <button type="button" class="btn btn-danger" @onclick="() => DeleteItem(itemId)">Delete</button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
         }
     </div>
 </div>
 
+@* Template Picker Modal *@
+@if (_showTemplatePicker)
+{
+    <div class="modal-overlay" @onclick="() => _showTemplatePicker = false">
+        <div class="modal" @onclick:stopPropagation="true" style="max-width:500px">
+            <h3>Choose Item Type</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+                @foreach (var t in _templates)
+                {
+                    var tmpl = t;
+                    <button type="button" class="btn btn-secondary" style="padding:14px;text-align:left;display:flex;align-items:center;gap:10px"
+                            @onclick="() => SelectTemplate(tmpl)">
+                        <span style="font-size:22px">@tmpl.Icon</span>
+                        <span>@tmpl.Name</span>
+                    </button>
+                }
+            </div>
+            <div style="margin-top:14px">
+                <button type="button" class="btn btn-secondary" @onclick="() => _showTemplatePicker = false">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* Add / Edit Item Modal *@
 @if (_showModal)
 {
     <div class="modal-overlay" @onclick="CloseModal">
         <div class="modal" @onclick:stopPropagation="true">
-            <h3>Add Password</h3>
+            <h3>@(_editingItem is null ? $"Add {_selectedTemplate?.Name ?? "Item"}" : $"Edit {_editingItem.Name}")</h3>
             @if (!string.IsNullOrEmpty(_addError))
             {
                 <div class="alert-error">@_addError</div>
@@ -84,16 +152,133 @@
                 <input class="form-control" placeholder="e.g. Gmail" @bind="_newName" />
             </div>
             <div class="form-group">
-                <label>Website URL</label>
+                <label>Website URL (optional)</label>
                 <input class="form-control" placeholder="https://gmail.com" @bind="_newUrl" />
             </div>
-            <div class="form-group">
-                <label>Password</label>
-                <input class="form-control" type="password" placeholder="••••••••" @bind="_newPassword" />
-            </div>
+
+            @if (_selectedTemplate is not null)
+            {
+                @foreach (var field in _selectedTemplate.Fields.OrderBy(f => f.Order))
+                {
+                    var f = field;
+                    <div class="form-group">
+                        <label>@f.Name @(f.IsRequired ? "*" : "")</label>
+                        @if (f.FieldType == "Password" || f.IsEncrypted)
+                        {
+                            <input class="form-control" type="password" placeholder="••••••••"
+                                   value="@GetFieldValue(f.Name)"
+                                   @oninput="e => SetFieldValue(f.Name, e.Value?.ToString() ?? string.Empty)" />
+                        }
+                        else if (f.FieldType == "Note")
+                        {
+                            <textarea class="form-control" rows="3"
+                                      @bind="_fieldValues[f.Name]"></textarea>
+                        }
+                        else
+                        {
+                            <input class="form-control" placeholder="@f.Name"
+                                   value="@GetFieldValue(f.Name)"
+                                   @oninput="e => SetFieldValue(f.Name, e.Value?.ToString() ?? string.Empty)" />
+                        }
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="form-group">
+                    <label>Password</label>
+                    <input class="form-control" type="password" placeholder="••••••••" @bind="_newPassword" />
+                </div>
+            }
+
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
-                <button type="button" class="btn btn-primary" style="width:auto" @onclick="AddItem">Save</button>
+                <button type="button" class="btn btn-primary" style="width:auto" @onclick="SaveItem" disabled="@_saving">@(_saving ? "Saving…" : "Save")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* History Modal *@
+@if (_showHistoryModal)
+{
+    <div class="modal-overlay" @onclick="() => _showHistoryModal = false">
+        <div class="modal" @onclick:stopPropagation="true" style="max-width:500px">
+            <h3>Password History</h3>
+            @if (_history.Count == 0)
+            {
+                <p style="color:var(--text-secondary)">No history available.</p>
+            }
+            else
+            {
+                @foreach (var h in _history)
+                {
+                    <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
+                        <div style="font-size:12px;color:var(--text-secondary)">@h.CreatedAt.ToLocalTime().ToString("g")</div>
+                        <div style="font-family:monospace;font-size:13px;margin-top:4px">@h.EncryptedData[..Math.Min(40,h.EncryptedData.Length)]…</div>
+                    </div>
+                }
+            }
+            <button type="button" class="btn btn-secondary" @onclick="() => _showHistoryModal = false">Close</button>
+        </div>
+    </div>
+}
+
+@* Security Dashboard Modal *@
+@if (_showSecurityModal)
+{
+    <div class="modal-overlay" @onclick="() => _showSecurityModal = false">
+        <div class="modal" @onclick:stopPropagation="true" style="max-width:560px">
+            <h3>🛡 Security Dashboard</h3>
+            @if (_securityLoading)
+            {
+                <p style="color:var(--text-secondary)">Analyzing...</p>
+            }
+            else
+            {
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:16px 0">
+                    <div class="security-card">
+                        <div class="security-score @(_weakCount > 0 ? "bad" : "good")">@_weakCount</div>
+                        <div>Weak passwords</div>
+                    </div>
+                    <div class="security-card">
+                        <div class="security-score @(_reusedCount > 0 ? "warn" : "good")">@_reusedCount</div>
+                        <div>Reused passwords</div>
+                    </div>
+                    <div class="security-card">
+                        <div class="security-score good">@_items.Count</div>
+                        <div>Total items</div>
+                    </div>
+                </div>
+                @if (_weakItems.Count > 0)
+                {
+                    <h4 style="margin-bottom:8px">Weak passwords</h4>
+                    @foreach (var name in _weakItems)
+                    {
+                        <div style="color:#ef4444;font-size:13px;margin-bottom:4px">⚠ @name</div>
+                    }
+                }
+            }
+            <button type="button" class="btn btn-secondary" style="margin-top:16px" @onclick="() => _showSecurityModal = false">Close</button>
+        </div>
+    </div>
+}
+
+@* Import Modal *@
+@if (_showImportModal)
+{
+    <div class="modal-overlay" @onclick="() => _showImportModal = false">
+        <div class="modal" @onclick:stopPropagation="true" style="max-width:460px">
+            <h3>Import Passwords</h3>
+            <p style="font-size:13px;color:var(--text-secondary)">Paste exported VaultPass JSON below.</p>
+            <textarea class="form-control" rows="6" @bind="_importJson" style="font-family:monospace;font-size:12px"></textarea>
+            @if (!string.IsNullOrEmpty(_importError))
+            {
+                <div class="alert-error" style="margin-top:8px">@_importError</div>
+            }
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" @onclick="() => _showImportModal = false">Cancel</button>
+                <button type="button" class="btn btn-primary" style="width:auto" @onclick="DoImport">Import</button>
             </div>
         </div>
     </div>
@@ -101,19 +286,52 @@
 
 @code {
     private List<VaultItemModel> _items = [];
+    private List<ItemTemplateModel> _templates = [];
     private bool _loading = true;
-    private bool _showModal = false;
+    private bool _saving = false;
+    private bool _travelMode = false;
     private Guid _vaultId;
     private string? _encKeyBase64;
+    private string _globalError = "";
 
+    // modal state
+    private bool _showTemplatePicker = false;
+    private bool _showModal = false;
+    private bool _showHistoryModal = false;
+    private bool _showSecurityModal = false;
+    private bool _showImportModal = false;
+
+    // add/edit
+    private VaultItemModel? _editingItem;
+    private ItemTemplateModel? _selectedTemplate;
     private string _newName = "";
     private string _newUrl = "";
     private string _newPassword = "";
     private string _addError = "";
+    private Dictionary<string, string> _fieldValues = new();
 
+    // reveal / copy
     private HashSet<Guid> _revealedItems = [];
-    private Dictionary<Guid, string> _decryptedPasswords = [];
+    private Dictionary<Guid, Dictionary<string, string>> _decryptedFields = [];
     private Guid _copiedId = Guid.Empty;
+    private Dictionary<Guid, string> _sharedTokens = new();
+
+    // history
+    private List<VaultItemHistoryModel> _history = [];
+
+    // security
+    private bool _securityLoading = false;
+    private int _weakCount = 0;
+    private int _reusedCount = 0;
+    private List<string> _weakItems = [];
+
+    // import
+    private string _importJson = "";
+    private string _importError = "";
+
+    private List<VaultItemModel> _visibleItems => _travelMode
+        ? _items.Where(i => !i.IsHiddenInTravelMode).ToList()
+        : _items;
 
     protected override async Task OnInitializedAsync()
     {
@@ -128,10 +346,15 @@
         try
         {
             _items = await VaultItemService.GetItemsAsync(_vaultId);
+            _templates = await VaultItemService.GetTemplatesAsync(_vaultId);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            await Logout();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[LOAD ERROR] {ex.Message}");
+            _globalError = "Failed to load vault: " + ex.Message;
         }
         finally
         {
@@ -139,39 +362,83 @@
         }
     }
 
-    private void OpenModal()
+    private void OpenAddModal()
     {
-        _newName = "";
-        _newUrl = "";
-        _newPassword = "";
-        _addError = "";
+        _editingItem = null;
+        _newName = _newUrl = _newPassword = _addError = "";
+        _fieldValues = new();
+        _selectedTemplate = null;
+        _showTemplatePicker = true;
+    }
+
+    private void SelectTemplate(ItemTemplateModel t)
+    {
+        _selectedTemplate = t;
+        _fieldValues = t.Fields.ToDictionary(f => f.Name, _ => "");
+        _showTemplatePicker = false;
         _showModal = true;
     }
 
-    private void CloseModal() => _showModal = false;
-
-    private async Task AddItem()
+    private void OpenEditModal(VaultItemModel item)
     {
+        _editingItem = item;
+        _newName = item.Name;
+        _newUrl = item.WebsiteUrl ?? "";
+        _newPassword = "";
+        _addError = "";
+        _selectedTemplate = _templates.FirstOrDefault(t => t.Id == item.TemplateId);
+        _fieldValues = _selectedTemplate?.Fields.ToDictionary(f => f.Name, _ => "") ?? new();
+        _showModal = true;
+    }
+
+    private void CloseModal() { _showModal = false; _editingItem = null; }
+
+    private string GetFieldValue(string name) => _fieldValues.TryGetValue(name, out var v) ? v : "";
+    private void SetFieldValue(string name, string value) => _fieldValues[name] = value;
+
+    private async Task SaveItem()
+    {
+        if (_saving) return;
         _addError = "";
         if (string.IsNullOrWhiteSpace(_newName)) { _addError = "Name is required."; return; }
-        if (string.IsNullOrWhiteSpace(_newPassword)) { _addError = "Password is required."; return; }
+        _saving = true;
 
         try
         {
-            var encryptedData = await EncryptAsync(_newPassword);
-
-            var request = new CreateVaultItemRequest(
-                VaultId: _vaultId,
-                Name: _newName,
-                Type: 1,
-                EncryptedData: encryptedData,
-                WebsiteUrl: string.IsNullOrEmpty(_newUrl) ? null : _newUrl
-            );
-
-            var success = await VaultItemService.CreateItemAsync(request);
-            if (success)
+            string encryptedData;
+            if (_selectedTemplate is not null)
             {
-                _showModal = false;
+                var encFields = new Dictionary<string, string>();
+                foreach (var field in _selectedTemplate.Fields)
+                {
+                    var val = _fieldValues.TryGetValue(field.Name, out var v) ? v : "";
+                    encFields[field.Name] = field.IsEncrypted ? await EncryptAsync(val) : val;
+                }
+                encryptedData = await EncryptAsync(JsonSerializer.Serialize(encFields));
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(_newPassword)) { _addError = "Password is required."; return; }
+                encryptedData = await EncryptAsync(_newPassword);
+            }
+
+            bool ok;
+            if (_editingItem is null)
+            {
+                ok = await VaultItemService.CreateItemAsync(new CreateVaultItemRequest(
+                    _vaultId, _newName, 1, encryptedData,
+                    string.IsNullOrEmpty(_newUrl) ? null : _newUrl,
+                    _selectedTemplate?.Id));
+            }
+            else
+            {
+                ok = await VaultItemService.UpdateItemAsync(_editingItem.Id, _newName, encryptedData,
+                    string.IsNullOrEmpty(_newUrl) ? null : _newUrl);
+            }
+
+            if (ok)
+            {
+                CloseModal();
                 _items = await VaultItemService.GetItemsAsync(_vaultId);
             }
             else
@@ -182,9 +449,174 @@
         catch (Exception ex)
         {
             _addError = "Error: " + ex.Message;
-            Console.WriteLine($"[ADD ERROR] {ex.Message}");
+        }
+        finally
+        {
+            _saving = false;
         }
     }
+
+    private async Task ToggleReveal(Guid id, string encryptedData)
+    {
+        if (_revealedItems.Contains(id))
+        {
+            _revealedItems.Remove(id);
+        }
+        else
+        {
+            if (!_decryptedFields.ContainsKey(id))
+            {
+                var plain = await DecryptAsync(encryptedData);
+                var fields = new Dictionary<string, string>();
+                try
+                {
+                    var parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(plain);
+                    if (parsed is not null) fields = parsed;
+                    else fields["Password"] = plain;
+                }
+                catch { fields["Password"] = plain; }
+                _decryptedFields[id] = fields;
+            }
+            _revealedItems.Add(id);
+        }
+    }
+
+    private async Task CopyFirst(Guid itemId, string encryptedData)
+    {
+        string val;
+        if (_decryptedFields.TryGetValue(itemId, out var fields))
+            val = fields.Values.FirstOrDefault() ?? "";
+        else
+        {
+            var plain = await DecryptAsync(encryptedData);
+            try
+            {
+                var parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(plain);
+                val = parsed?.Values.FirstOrDefault() ?? plain;
+            }
+            catch { val = plain; }
+        }
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", val); } catch { }
+        _copiedId = itemId;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _copiedId = Guid.Empty;
+        StateHasChanged();
+    }
+
+    private async Task DeleteItem(Guid id)
+    {
+        _revealedItems.Remove(id);
+        _decryptedFields.Remove(id);
+        await VaultItemService.DeleteItemAsync(id);
+        _items = await VaultItemService.GetItemsAsync(_vaultId);
+    }
+
+    private async Task OpenHistoryModal(Guid itemId)
+    {
+        _history = await VaultItemService.GetHistoryAsync(itemId);
+        _showHistoryModal = true;
+    }
+
+    private async Task ShareItem(Guid itemId)
+    {
+        var token = await VaultItemService.CreateShareAsync(itemId);
+        if (token is null) return;
+        var url = Navigation.BaseUri + $"shared/{token}";
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", url); } catch { }
+        _sharedTokens[itemId] = token;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _sharedTokens.Remove(itemId);
+        StateHasChanged();
+    }
+
+    private async Task ToggleTravelMode()
+    {
+        _travelMode = !_travelMode;
+        await VaultItemService.SetTravelModeAsync(_vaultId, _travelMode);
+    }
+
+    private async Task ToggleItemTravelHidden(VaultItemModel item)
+    {
+        await VaultItemService.SetItemTravelHiddenAsync(item.Id, !item.IsHiddenInTravelMode);
+        _items = await VaultItemService.GetItemsAsync(_vaultId);
+    }
+
+    private async Task ExportVault()
+    {
+        var data = await VaultItemService.ExportAsync(_vaultId);
+        var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+        await JS.InvokeVoidAsync("downloadFile", "vaultpass-export.json", json);
+    }
+
+    private async Task DoImport()
+    {
+        _importError = "";
+        try
+        {
+            var items = JsonSerializer.Deserialize<List<ImportItemDto>>(_importJson);
+            if (items is null || items.Count == 0) { _importError = "No items found."; return; }
+            var count = await VaultItemService.ImportAsync(_vaultId, items);
+            _showImportModal = false;
+            _importJson = "";
+            _items = await VaultItemService.GetItemsAsync(_vaultId);
+            _globalError = $"Imported {count} items successfully.";
+            await Task.Delay(3000);
+            _globalError = "";
+        }
+        catch (Exception ex)
+        {
+            _importError = "Invalid format: " + ex.Message;
+        }
+    }
+
+    private async Task OpenSecurityModal()
+    {
+        _showSecurityModal = true;
+        await RunSecurityAnalysis();
+    }
+
+    private async Task RunSecurityAnalysis()
+    {
+        _securityLoading = true;
+        _weakCount = 0; _reusedCount = 0; _weakItems = [];
+        var passwords = new List<(string Name, string Plain)>();
+
+        foreach (var item in _items)
+        {
+            try
+            {
+                var plain = await DecryptAsync(item.EncryptedData);
+                string pwd;
+                try
+                {
+                    var d = JsonSerializer.Deserialize<Dictionary<string, string>>(plain);
+                    pwd = d?.Values.FirstOrDefault() ?? plain;
+                }
+                catch { pwd = plain; }
+
+                if (!string.IsNullOrEmpty(pwd))
+                    passwords.Add((item.Name, pwd));
+            }
+            catch { }
+        }
+
+        foreach (var (name, pwd) in passwords)
+        {
+            if (pwd.Length < 8 || !pwd.Any(char.IsUpper) || !pwd.Any(char.IsDigit))
+            {
+                _weakCount++;
+                _weakItems.Add(name);
+            }
+        }
+
+        var grouped = passwords.GroupBy(p => p.Plain).Where(g => g.Count() > 1);
+        _reusedCount = grouped.SelectMany(g => g).Count();
+        _securityLoading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender) { }
 
     private async Task<string> EncryptAsync(string plaintext)
     {
@@ -199,31 +631,37 @@
         catch { return encryptedData; }
     }
 
-    private async Task ToggleReveal(Guid id, string encryptedData)
+    private string GetItemIcon(VaultItemModel item)
     {
-        if (_revealedItems.Contains(id))
+        if (item.TemplateId.HasValue)
         {
-            _revealedItems.Remove(id);
+            var t = _templates.FirstOrDefault(t => t.Id == item.TemplateId);
+            return t?.Icon ?? "🔑";
         }
-        else
-        {
-            if (!_decryptedPasswords.ContainsKey(id))
-                _decryptedPasswords[id] = await DecryptAsync(encryptedData);
-            _revealedItems.Add(id);
-        }
+        return "🔑";
     }
 
-    private async Task CopyPassword(Guid itemId, string encryptedData)
+    private record VaultGroup(string Icon, string Name, List<VaultItemModel> Items);
+
+    private List<VaultGroup> GetGroupedItems()
     {
-        var plain = _decryptedPasswords.TryGetValue(itemId, out var cached)
-            ? cached
-            : await DecryptAsync(encryptedData);
-        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", plain); } catch { }
-        _copiedId = itemId;
-        StateHasChanged();
-        await Task.Delay(1500);
-        _copiedId = Guid.Empty;
-        StateHasChanged();
+        var groups = new List<VaultGroup>();
+        var templateGroups = _visibleItems
+            .Where(i => i.TemplateId.HasValue)
+            .GroupBy(i => i.TemplateId!.Value);
+
+        foreach (var g in templateGroups)
+        {
+            var tmpl = _templates.FirstOrDefault(t => t.Id == g.Key);
+            if (tmpl is not null)
+                groups.Add(new VaultGroup(tmpl.Icon, tmpl.Name, g.ToList()));
+        }
+
+        var untyped = _visibleItems.Where(i => !i.TemplateId.HasValue).ToList();
+        if (untyped.Count > 0)
+            groups.Add(new VaultGroup("🔑", "Passwords", untyped));
+
+        return groups;
     }
 
     private static Guid ParseVaultIdFromToken(string token)
@@ -233,26 +671,13 @@
             var parts = token.Split('.');
             if (parts.Length != 3) return Guid.Empty;
             var payload = parts[1].Replace('-', '+').Replace('_', '/');
-            switch (payload.Length % 4)
-            {
-                case 2: payload += "=="; break;
-                case 3: payload += "="; break;
-            }
+            switch (payload.Length % 4) { case 2: payload += "=="; break; case 3: payload += "="; break; }
             var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("vaultId", out var vaultIdProp))
-                return Guid.Parse(vaultIdProp.GetString()!);
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("vaultId", out var v)) return Guid.Parse(v.GetString()!);
             return Guid.Empty;
         }
         catch { return Guid.Empty; }
-    }
-
-    private async Task DeleteItem(Guid id)
-    {
-        _revealedItems.Remove(id);
-        _decryptedPasswords.Remove(id);
-        await VaultItemService.DeleteItemAsync(id);
-        _items = await VaultItemService.GetItemsAsync(_vaultId);
     }
 
     private async Task Logout()

@@ -1,3 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <text x="50" y="68" font-size="55" text-anchor="middle">🔐</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <polygon points="64,10 112,28 112,66 64,118 16,66 16,28" fill="#ffffff"/>
+  <circle cx="64" cy="54" r="16" fill="#0052CC"/>
+  <rect x="57.5" y="68" width="13" height="23" rx="2" fill="#0052CC"/>
+  <rect x="70.5" y="72" width="9" height="6" rx="1" fill="#0052CC"/>
+  <rect x="70.5" y="82" width="9" height="6" rx="1" fill="#0052CC"/>
 </svg>

@@ -12,7 +12,9 @@ public class DeleteVaultItemCommandHandler : IRequestHandler<DeleteVaultItemComm
 
     public async Task Handle(DeleteVaultItemCommand command, CancellationToken ct)
     {
-        // Mark the item for removal, then flush to the database
+        var item = await _repository.GetByIdAsync(command.Id, ct);
+        if (item is null || item.VaultId != command.CallerVaultId)
+            throw new UnauthorizedAccessException("Item not found or access denied.");
         await _repository.DeleteAsync(command.Id, ct);
         await _repository.SaveChangesAsync(ct);
     }

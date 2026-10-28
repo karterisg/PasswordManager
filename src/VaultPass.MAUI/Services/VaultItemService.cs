@@ -40,7 +40,15 @@ public class VaultItemService
         return response.IsSuccessStatusCode;
     }
 
-    // DELETE /api/vaultitems/{id} — permanently removes a vault item
+    public async Task<bool> UpdateItemAsync(Guid id, string name, string encryptedData, string? websiteUrl)
+    {
+        await SetAuthHeader();
+        var response = await _http.PutAsJsonAsync($"api/vaultitems/{id}",
+            new { Id = id, Name = name, EncryptedData = encryptedData, WebsiteUrl = websiteUrl });
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException();
+        return response.IsSuccessStatusCode;
+    }
+
     public async Task<bool> DeleteItemAsync(Guid id)
     {
         await SetAuthHeader();
@@ -49,6 +57,53 @@ public class VaultItemService
             throw new UnauthorizedAccessException();
         return response.IsSuccessStatusCode;
     }
+
+    public async Task<List<ItemTemplateModel>> GetTemplatesAsync(Guid vaultId)
+    {
+        await SetAuthHeader();
+        var response = await _http.GetAsync($"api/itemtemplates?vaultId={vaultId}");
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException();
+        return await response.Content.ReadFromJsonAsync<List<ItemTemplateModel>>() ?? [];
+    }
+
+    public async Task<List<VaultItemHistoryModel>> GetHistoryAsync(Guid itemId)
+    {
+        await SetAuthHeader();
+        var response = await _http.GetAsync($"api/vaultitems/{itemId}/history");
+        return await response.Content.ReadFromJsonAsync<List<VaultItemHistoryModel>>() ?? [];
+    }
+
+    public async Task<List<ExportItemModel>> ExportAsync(Guid vaultId)
+    {
+        await SetAuthHeader();
+        return await _http.GetFromJsonAsync<List<ExportItemModel>>($"api/vaultitems/export?vaultId={vaultId}") ?? [];
+    }
+
+    public async Task<string?> CreateShareAsync(Guid itemId, int expiryHours = 24, int maxUses = 1)
+    {
+        await SetAuthHeader();
+        var response = await _http.PostAsJsonAsync("api/share",
+            new { VaultItemId = itemId, ExpiryHours = expiryHours, MaxUses = maxUses });
+        if (!response.IsSuccessStatusCode) return null;
+        var result = await response.Content.ReadFromJsonAsync<ShareResult>();
+        return result?.Token;
+    }
+
+    public async Task<bool> SetTravelModeAsync(Guid vaultId, bool enabled)
+    {
+        await SetAuthHeader();
+        var response = await _http.PatchAsJsonAsync($"api/vault/{vaultId}/travel-mode", new { Enabled = enabled });
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> SetItemTravelHiddenAsync(Guid itemId, bool hidden)
+    {
+        await SetAuthHeader();
+        var response = await _http.PatchAsJsonAsync($"api/vaultitems/{itemId}/travel-hidden", new { Hidden = hidden });
+        return response.IsSuccessStatusCode;
+    }
+
+    private record ShareResult(string Token);
 
     // Reads the stored JWT token and attaches it as a Bearer Authorization header.
     // Called before every request because the token may change after re-login.

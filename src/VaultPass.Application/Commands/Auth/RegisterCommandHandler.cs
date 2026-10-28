@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using VaultPass.Application.Interfaces;
 using VaultPass.Domain.Entities;
+using DomainVault = VaultPass.Domain.Entities.Vault;
 
 namespace VaultPass.Application.Commands.Auth;
 
@@ -31,7 +32,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, Guid>
         await _userRepository.AddAsync(user, ct);
 
         // Every new user gets a personal vault created automatically
-        var vault = Vault.CreatePersonal(user.Id, user.DisplayName);
+        var vault = DomainVault.CreatePersonal(user.Id, user.DisplayName);
         await _vaultRepository.AddAsync(vault, ct);
 
         // Single SaveChanges call persists both the user and the vault atomically

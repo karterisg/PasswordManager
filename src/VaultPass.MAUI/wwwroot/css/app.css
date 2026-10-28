@@ -57,13 +57,8 @@ body {
 .auth-logo-icon {
     width: 40px;
     height: 40px;
-    background: var(--accent);
     border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 20px;
+    display: block;
 }
 
 .auth-logo h1 {
@@ -198,14 +193,53 @@ body {
 .topbar {
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-    padding: 0 24px;
-    height: 60px;
+    padding: 0 16px;
+    height: 56px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     position: sticky;
     top: 0;
     z-index: 10;
+}
+
+.travel-badge {
+    font-size: 11px;
+    background: #f59e0b;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-weight: 600;
+    margin-left: 6px;
+}
+
+.icon-btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: none;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    color: var(--text-primary);
+}
+
+.icon-btn.active {
+    background: #f59e0b20;
+    border-color: #f59e0b;
+}
+
+.bottom-bar {
+    padding: 12px 16px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    bottom: 0;
 }
 
 .topbar-brand {
@@ -219,13 +253,11 @@ body {
 .topbar-brand-icon {
     width: 28px;
     height: 28px;
-    background: var(--accent);
     border-radius: 7px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
-    font-size: 14px;
+    overflow: hidden;
 }
 
 .dashboard-content {
@@ -247,6 +279,40 @@ body {
         font-weight: 700;
         letter-spacing: -0.2px;
     }
+
+.vault-group {
+    margin-bottom: 20px;
+}
+
+.vault-group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 0 2px;
+}
+
+.vault-group-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.vault-group-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.vault-group-count {
+    font-size: 11px;
+    background: var(--border);
+    color: var(--text-secondary);
+    border-radius: 20px;
+    padding: 1px 7px;
+    font-weight: 600;
+}
 
 .vault-list {
     display: flex;
@@ -330,24 +396,26 @@ body {
     inset: 0;
     background: rgba(0,0,0,0.4);
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: center;
     z-index: 1100;
-    padding: 24px;
+    padding: 0;
 }
 
 .modal {
-    display: block;
+    display: flex;
+    flex-direction: column;
     position: relative;
     height: auto;
-    overflow: visible;
+    max-height: 90vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     background: var(--surface);
-    border-radius: var(--radius);
-    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-    padding: 32px;
+    border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: 0 -4px 30px rgba(0,0,0,0.18);
+    padding: 24px 20px;
     width: 100%;
-    max-width: 440px;
-    z-index: auto;
+    max-width: 100%;
 }
 
     .modal h3 {

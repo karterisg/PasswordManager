@@ -12,10 +12,13 @@ public class UpdateVaultItemCommandHandler : IRequestHandler<UpdateVaultItemComm
 
     public async Task Handle(UpdateVaultItemCommand command, CancellationToken ct)
     {
-        var item = await _repository.GetByIdAsync(command.Id, ct)
-            ?? throw new KeyNotFoundException($"VaultItem {command.Id} not found.");
+        var item = await _repository.GetByIdAsync(command.Id, ct);
+        if (item is null || item.VaultId != command.CallerVaultId)
+            throw new UnauthorizedAccessException("Item not found or access denied.");
 
-        // Delegate mutation to the domain entity so business rules are enforced there
+        var history = VaultPass.Domain.Entities.VaultItemHistory.Create(item.Id, item.EncryptedData);
+        await _repository.AddHistoryAsync(history, ct);
+
         item.Update(command.Name, command.EncryptedData, command.WebsiteUrl);
 
         await _repository.UpdateAsync(item, ct);

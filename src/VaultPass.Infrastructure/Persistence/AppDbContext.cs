@@ -15,6 +15,8 @@ public class AppDbContext : DbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<ItemTemplate> ItemTemplates => Set<ItemTemplate>();
     public DbSet<ItemTemplateField> ItemTemplateFields => Set<ItemTemplateField>();
+    public DbSet<VaultItemHistory> VaultItemHistories => Set<VaultItemHistory>();
+    public DbSet<SharedItem> SharedItems => Set<SharedItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
