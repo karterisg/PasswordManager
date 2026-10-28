@@ -23,8 +23,10 @@ public class VaultItemService
     public async Task<List<VaultItemModel>> GetItemsAsync(Guid vaultId)
     {
         await SetAuthHeader();
-        var result = await _http.GetFromJsonAsync<List<VaultItemModel>>(
-            $"api/vaultitems?vaultId={vaultId}");
+        var response = await _http.GetAsync($"api/vaultitems?vaultId={vaultId}");
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            throw new UnauthorizedAccessException();
+        var result = await response.Content.ReadFromJsonAsync<List<VaultItemModel>>();
         return result ?? [];
     }
 
@@ -33,6 +35,8 @@ public class VaultItemService
     {
         await SetAuthHeader();
         var response = await _http.PostAsJsonAsync("api/vaultitems", request);
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            throw new UnauthorizedAccessException();
         return response.IsSuccessStatusCode;
     }
 
@@ -41,6 +45,8 @@ public class VaultItemService
     {
         await SetAuthHeader();
         var response = await _http.DeleteAsync($"api/vaultitems/{id}");
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            throw new UnauthorizedAccessException();
         return response.IsSuccessStatusCode;
     }
 

@@ -138,6 +138,11 @@
         {
             _items = await VaultItemService.GetItemsAsync(_vaultId);
         }
+        catch (UnauthorizedAccessException)
+        {
+            await Logout();
+            return;
+        }
         catch (Exception ex)
         {
             Console.WriteLine($"[LOAD ERROR] {ex.Message}");
@@ -188,6 +193,10 @@
             {
                 _addError = "Failed to save. Please try again.";
             }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            await Logout();
         }
         catch (Exception ex)
         {

@@ -16,6 +16,7 @@ public class VaultItem : BaseEntity
     public string? WebsiteUrl { get; private set; }
     public bool IsFavorite { get; private set; }
     public DateTime? LastAccessedAt { get; private set; }
+    public Guid? TemplateId { get; private set; }
 
     private VaultItem() { }
 
@@ -24,7 +25,8 @@ public class VaultItem : BaseEntity
         string name,
         VaultItemType type,
         string encryptedData,
-        string? websiteUrl = null)
+        string? websiteUrl = null,
+        Guid? templateId = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Name cannot be empty.");
@@ -38,7 +40,8 @@ public class VaultItem : BaseEntity
             Name = name,
             Type = type,
             EncryptedData = encryptedData,
-            WebsiteUrl = websiteUrl
+            WebsiteUrl = websiteUrl,
+            TemplateId = templateId
         };
     }
 

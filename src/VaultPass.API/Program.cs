@@ -57,7 +57,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("BlazorClient", policy =>
-        policy.WithOrigins("https://localhost:7120", "http://localhost:7120")
+        policy.WithOrigins("https://localhost:7120", "http://localhost:7120", "http://localhost:5002", "https://localhost:5002")
               .AllowAnyHeader()
               .AllowAnyMethod());
 
@@ -93,6 +93,13 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+
+    if (!db.ItemTemplates.Any())
+    {
+        var templates = VaultPass.Infrastructure.Seed.BuiltInTemplates.GetAll();
+        db.ItemTemplates.AddRange(templates);
+        await db.SaveChangesAsync();
+    }
 }
 
 app.Run();

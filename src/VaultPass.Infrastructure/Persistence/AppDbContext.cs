@@ -13,6 +13,8 @@ public class AppDbContext : DbContext
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamMember> TeamMembers => Set<TeamMember>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<ItemTemplate> ItemTemplates => Set<ItemTemplate>();
+    public DbSet<ItemTemplateField> ItemTemplateFields => Set<ItemTemplateField>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

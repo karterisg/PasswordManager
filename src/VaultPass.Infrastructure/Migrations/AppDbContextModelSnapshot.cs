@@ -59,6 +59,78 @@ namespace VaultPass.Infrastructure.Migrations
                     b.ToTable("AuditLogs");
                 });
 
+            modelBuilder.Entity("VaultPass.Domain.Entities.ItemTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Icon")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsBuiltIn")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("VaultId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ItemTemplates");
+                });
+
+            modelBuilder.Entity("VaultPass.Domain.Entities.ItemTemplateField", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("FieldType")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsEncrypted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("ItemTemplateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ItemTemplateId");
+
+                    b.ToTable("ItemTemplateFields");
+                });
+
             modelBuilder.Entity("VaultPass.Domain.Entities.Team", b =>
                 {
                     b.Property<Guid>("Id")
@@ -208,6 +280,9 @@ namespace VaultPass.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<Guid?>("TemplateId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("Type")
                         .HasColumnType("int");
 
@@ -228,6 +303,13 @@ namespace VaultPass.Infrastructure.Migrations
                     b.ToTable("VaultItems");
                 });
 
+            modelBuilder.Entity("VaultPass.Domain.Entities.ItemTemplateField", b =>
+                {
+                    b.HasOne("VaultPass.Domain.Entities.ItemTemplate", null)
+                        .WithMany("Fields")
+                        .HasForeignKey("ItemTemplateId");
+                });
+
             modelBuilder.Entity("VaultPass.Domain.Entities.TeamMember", b =>
                 {
                     b.HasOne("VaultPass.Domain.Entities.Team", null)
@@ -244,6 +326,11 @@ namespace VaultPass.Infrastructure.Migrations
                         .HasForeignKey("VaultId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("VaultPass.Domain.Entities.ItemTemplate", b =>
+                {
+                    b.Navigation("Fields");
                 });
 
             modelBuilder.Entity("VaultPass.Domain.Entities.Team", b =>

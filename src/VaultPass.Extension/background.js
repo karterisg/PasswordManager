@@ -1,11 +1,12 @@
 const API = "http://localhost:5243";
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg.type === "LOGIN")        handleLogin(msg, sendResponse);
-  else if (msg.type === "GET_ITEMS") handleGetItems(sendResponse);
-  else if (msg.type === "SAVE_ITEM") handleSaveItem(msg, sendResponse);
-  else if (msg.type === "GET_TOKEN") handleGetToken(sendResponse);
-  return true; // keep channel open for async
+  if      (msg.type === "LOGIN")           handleLogin(msg, sendResponse);
+  else if (msg.type === "GET_ITEMS")       handleGetItems(sendResponse);
+  else if (msg.type === "GET_MATCHING")    handleGetMatching(msg, sendResponse);
+  else if (msg.type === "SAVE_ITEM")       handleSaveItem(msg, sendResponse);
+  else if (msg.type === "GET_TOKEN")       handleGetToken(sendResponse);
+  return true;
 });
 
 async function handleLogin({ email, password }, sendResponse) {
@@ -28,7 +29,7 @@ async function handleGetItems(sendResponse) {
     const { token } = await chrome.storage.local.get("token");
     if (!token) { sendResponse({ ok: false }); return; }
     const vaultId = parseVaultId(token);
-    const res = await fetch(`${API}/api/vaultitems/${vaultId}`, {
+    const res = await fetch(`${API}/api/vaultitems?vaultId=${vaultId}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     const items = await res.json();
@@ -36,13 +37,32 @@ async function handleGetItems(sendResponse) {
   } catch (e) { sendResponse({ ok: false, error: e.message }); }
 }
 
-async function handleSaveItem({ name, url, password }, sendResponse) {
+// Returns items whose websiteUrl origin matches the given origin
+async function handleGetMatching({ origin }, sendResponse) {
+  try {
+    const { token } = await chrome.storage.local.get("token");
+    if (!token) { sendResponse({ ok: false, items: [] }); return; }
+    const vaultId = parseVaultId(token);
+    const res = await fetch(`${API}/api/vaultitems?vaultId=${vaultId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const items = await res.json();
+    const matching = items.filter(item => {
+      try { return new URL(item.websiteUrl).origin === origin; } catch { return false; }
+    });
+    sendResponse({ ok: true, items: matching });
+  } catch (e) { sendResponse({ ok: false, items: [] }); }
+}
+
+async function handleSaveItem({ name, url, username, password }, sendResponse) {
   try {
     const { token, passwordHash } = await chrome.storage.local.get(["token", "passwordHash"]);
     if (!token) { sendResponse({ ok: false }); return; }
-    const vaultId = parseVaultId(token);
-    const encKey  = await deriveKey(passwordHash, vaultId);
-    const encrypted = await encryptAesGcm(encKey, password);
+    const vaultId  = parseVaultId(token);
+    const encKey   = await deriveKey(passwordHash, vaultId);
+    // Encrypt both username and password together as JSON
+    const payload  = JSON.stringify({ username: username || "", password });
+    const encrypted = await encryptAesGcm(encKey, payload);
     const res = await fetch(`${API}/api/vaultitems`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -69,7 +89,7 @@ async function sha256(str) {
 }
 
 async function deriveKey(passwordHash, vaultId) {
-  const raw = new TextEncoder().encode(passwordHash + vaultId);
+  const raw  = new TextEncoder().encode(passwordHash + vaultId);
   const hash = await crypto.subtle.digest("SHA-256", raw);
   return crypto.subtle.importKey("raw", hash, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
