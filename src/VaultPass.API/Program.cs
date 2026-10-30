@@ -9,14 +9,19 @@ using VaultPass.Infrastructure;
 using VaultPass.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Host.UseWindowsService();
+if (OperatingSystem.IsWindows())
+    builder.Host.UseWindowsService();
 
 //Serilog
-Log.Logger = new LoggerConfiguration()
+var loggerConfig = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
-    .WriteTo.Console()
-    .WriteTo.Seq("http://localhost:5341")
-    .CreateLogger();
+    .WriteTo.Console();
+
+var seqUrl = builder.Configuration["Serilog:SeqUrl"];
+if (!string.IsNullOrWhiteSpace(seqUrl))
+    loggerConfig = loggerConfig.WriteTo.Seq(seqUrl);
+
+Log.Logger = loggerConfig.CreateLogger();
 
 builder.Host.UseSerilog();
 
@@ -54,10 +59,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 //CORS
+var corsOrigins = (builder.Configuration["CorsOrigins"] ?? "http://localhost:5243,https://localhost:7120")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("BlazorClient", policy =>
-        policy.WithOrigins("https://localhost:7120", "http://localhost:7120", "http://localhost:5002", "https://localhost:5002")
+        policy.WithOrigins(corsOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod());
 
@@ -66,6 +74,8 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader()
               .AllowAnyMethod());
 });
+
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
@@ -79,15 +89,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-    app.MapScalarApiReference();
-}
+app.MapOpenApi();
+app.MapScalarApiReference();
 
 
 
 app.MapControllers();
+app.MapHealthChecks("/health");
 
 using (var scope = app.Services.CreateScope())
 {

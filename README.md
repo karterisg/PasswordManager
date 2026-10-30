@@ -1,93 +1,145 @@
 ﻿# VaultPass
 
-VaultPass is a local-first password manager I built from scratch, designed to run entirely on your own machine with no cloud dependency. The idea was simple: keep your credentials encrypted on your own hardware, access them from a browser extension, a web app, or your phone, and never hand them to a third-party service. Everything (the API, the database, the clients) runs on infrastructure you control.
+VaultPass is a local-first password manager I built from scratch. The core idea is that your credentials never leave devices you control in plaintext, and you are never dependent on a third-party cloud. Depending on how you run it, the app works completely offline on your phone, through a web interface backed by your own server, or as a Chrome extension that autofills credentials on any site.
+
+There are two distinct usage modes:
+
+- **Standalone (MAUI)** — the Android, iOS, Windows, and macOS app stores everything locally in a SQLite database. It is fully offline and has no dependency on the API or any server. Authentication is PIN-based with optional biometrics.
+- **Connected (Web + Extension)** — the Blazor web app and Chrome extension both talk to the VaultPass API. You need to be running the API (locally or self-hosted via Docker) for these clients to function. Vault items are encrypted client-side before being sent to the server.
 
 ## How it's built
 
-### The core: Clean Architecture
+### The backend: Clean Architecture
 
-Before writing a single endpoint or UI component, I structured the backend around Clean Architecture. This was a deliberate choice: I wanted the business logic to be completely independent of frameworks, databases, and HTTP. The result is four separate .NET projects that each have a clear responsibility and a strict dependency direction.
+Before writing a single endpoint, I structured the backend around Clean Architecture with four projects that each have a strict dependency direction.
 
-**VaultPass.Domain** is the innermost layer and has zero external dependencies. It contains the entities (User, Vault, VaultItem, Team), the domain exceptions, and the enums. Every entity uses a private constructor and exposes factory methods like `User.Create(...)` and `VaultItem.Create(...)` to enforce invariants at the domain level. You simply cannot construct an invalid object. The master password, for example, is never stored in plain text anywhere in the domain model; the entity only ever accepts a hash.
+**VaultPass.Domain** is the innermost layer with zero external dependencies. It defines the entities (User, Vault, VaultItem, Team), domain exceptions, and enums. Every entity uses a private constructor and factory methods like `User.Create(...)` and `VaultItem.Create(...)` so you cannot construct an invalid object at the type level.
 
-**VaultPass.Application** sits on top of the domain and defines the use cases. I used the MediatR CQRS pattern throughout, so every operation is either a Command (writes) or a Query (reads), handled by a dedicated handler class. This layer also defines the repository interfaces that the infrastructure must implement, which means the application layer never imports Entity Framework or any database concern. Alongside the handlers, there are three MediatR pipeline behaviors: one for validation (FluentValidation runs before every handler), one for logging (Serilog logs every command and its result), and one for caching.
+**VaultPass.Application** defines the use cases using MediatR CQRS — every operation is a Command or a Query with a dedicated handler. This layer owns the repository interfaces, so it never touches Entity Framework directly. Three pipeline behaviors run on every handler: FluentValidation for input validation, Serilog for structured logging, and a caching layer.
 
-**VaultPass.Infrastructure** implements everything the application layer declared. It contains the EF Core DbContext, the repository implementations, the JWT service, and the migrations. The database is SQL Server LocalDB for development, which requires no installation beyond the .NET SDK.
+**VaultPass.Infrastructure** implements what the application layer declared: the EF Core DbContext, repository implementations, JWT service, and migrations. SQL Server is the default database for server deployments.
 
-**VaultPass.API** is the ASP.NET Core host. It wires everything together, configures the DI container, sets up JWT Bearer authentication, CORS policies for the different clients, and runs as a background task via `UseWindowsService()`.
+**VaultPass.API** is the ASP.NET Core host. It wires together the DI container, JWT Bearer auth, CORS policies, and runs as a Windows background service via `UseWindowsService()`. It also ships a `/api/itemtemplates` endpoint that returns the built-in item type definitions (Password, Credit Card, SSH Key, 2FA/TOTP, and more) that all clients use to render the correct fields.
 
 ### The API
 
-The API exposes two main controller groups: authentication (`/api/auth`) and vault items (`/api/vaultitems`). Login takes an email and a SHA-256 hash of the master password, so the raw password never travels over the wire. On success it returns a JWT that the clients use for all subsequent requests. The JWT payload includes the user's vault ID, which the clients extract client-side to scope their requests.
+The API exposes two main groups: `/api/auth` for registration and login, and `/api/vaultitems` for CRUD operations on vault entries. Login takes an email and a SHA-256 hash of the master password — the raw password never travels over the wire. On success it returns a JWT that all clients attach to subsequent requests. The JWT payload includes the user's vault ID, which the clients use client-side to scope encryption.
 
-The API is published as a self-contained executable and registered as a Task Scheduler entry that starts automatically when you log into Windows. It runs on `http://localhost:5243` and has no HTTPS requirement in production mode, since it only ever listens on localhost.
+On Windows the API is published as a self-contained executable and registered in Task Scheduler to start automatically at login. It listens on `http://localhost:5243`.
 
 ### The Web App: Blazor WebAssembly
 
-The browser-based client is a Blazor WebAssembly app (`VaultPass.Web`). It runs entirely in the browser and after the initial load there is no server rendering involved. The app talks to the API over HTTP, stores the JWT in the browser's localStorage, and handles the full login and vault management flow.
+`VaultPass.Web` is a Blazor WASM app that runs entirely in the browser after the initial load. It talks to the API over HTTP, stores the JWT in localStorage, and handles the full auth and vault management flow including the item template picker.
 
-The reason I chose Blazor WASM here rather than a JavaScript framework is that the entire codebase is already C#, so sharing types and patterns across the API and the web client comes naturally. The HttpClient is configured at startup with the API base URL, and the AuthService handles login, token storage, and logout.
+The modal display issue that Blazor WASM had on Bootstrap-hosted pages is worth noting: Bootstrap ships a global `.modal { display: none }` rule that overrides any custom modal CSS. The fix was to add `display: block !important` to the app stylesheet so the Bootstrap rule cannot win regardless of load order.
 
-To run the web app locally, you start it with `dotnet run` and it comes up on `http://localhost:5002`. No build step, no npm, no bundler configuration.
+To run locally: `dotnet run --project src/VaultPass.Web` — comes up on `http://localhost:5002`. No npm, no bundler.
 
-### The Mobile App: MAUI Blazor Hybrid
+### The Mobile App: MAUI Blazor Hybrid (offline-first)
 
-For iOS and Android I used .NET MAUI with Blazor Hybrid (`VaultPass.MAUI`). This is a native app shell that hosts a Blazor WebView inside it, which means the UI is the same Blazor components used in the web app, running natively in a mobile WebView rather than a browser tab.
+`VaultPass.MAUI` is a .NET MAUI app that hosts Blazor components in a native WebView. Unlike the web app, the mobile app is fully offline. It does not talk to the API at all — everything is stored locally on the device in a SQLite database using `sqlite-net-pcl`.
 
-The interesting part here was networking. On an Android emulator, `localhost` refers to the emulator itself, not the host machine where the API is running. The special address `10.0.2.2` is what the Android emulator maps to the host PC's loopback interface, so the MAUI app uses that address on Android and plain `localhost` everywhere else. This is handled in `AppConfig.cs` with a compiler directive:
+**Authentication** is PIN-based. On first launch the user sets a 4-digit PIN, which is SHA-256 hashed and stored in the OS secure storage. A random 32-byte salt is generated per device and stored alongside the hash so that the same PIN on two devices produces different hashes.
 
-```csharp
-#if ANDROID
-    public const string ApiBaseUrl = "http://10.0.2.2:5243/";
-#else
-    public const string ApiBaseUrl = "http://localhost:5243/";
-#endif
-```
+**Biometrics** integrate with the OS fingerprint / Face ID stack via `Plugin.Fingerprint`. On first successful PIN entry the user is offered the option to enable biometric unlock for future sessions. The biometric preference is stored in SecureStorage. On iOS and Android the prompt appears automatically if biometrics are configured.
 
-Android 9 and above block unencrypted HTTP traffic by default. Since the API runs on HTTP locally, I had to explicitly opt in to cleartext traffic in `AndroidManifest.xml` with `android:usesCleartextTraffic="true"`. Without this, the app would start, the WebView would load, but every API call would fail silently and Blazor would display its generic unhandled error screen.
+**Recovery codes** handle the case where a user forgets their PIN. During setup, a 24-character recovery code is generated (grouped as `XXXXX-XXXXX-XXXXX-XXXXX`) and its SHA-256 hash is stored in SecureStorage. The code is shown once and never again. On the PIN screen, tapping the logo five times reveals a hidden link to the recovery flow. The recovery flow accepts the code, verifies it against the hash, and lets the user set a new PIN without losing vault data.
 
-For physical Android or iOS devices on the same network, the `ApiBaseUrl` should be replaced with the host machine's LAN IP (e.g. `192.168.1.x:5243`).
+**Item templates** are defined entirely in the app code as a `BuiltInTemplates` collection — no network call needed. Each template defines the fields to show (URL, username, password, TOTP secret, card number, expiry, etc.) and a display name. When an item is saved, the template name is stored as a string in the SQLite row so that it survives database upgrades without foreign key dependencies.
+
+The BlazorWebView URL caching problem on Windows desktop was the trickiest part of the MAUI work. When the app restarts, the WebView restores its last URL before any C# code runs. If the last page was `/pin-login`, the Router renders that component from the cached URL even when no PIN is set yet. The fix was to abandon URL-based navigation entirely in the root `Routes.razor` and instead render `<PinSetup />`, `<PinLogin />`, or the main `<Router>` directly based on state flags read during `OnInitializedAsync`.
+
+A related issue: `SecureStorage.Default.RemoveAll()` on Windows does not reliably delete the `.dat` file that backs secure storage. On a clean install the stale file from a previous installation would make the app think a PIN was already set. The fix was a versioned file marker (`install_v4.marker`) written to the app data directory on first run. If the marker is missing, the code directly deletes the SecureStorage `.dat` file before doing anything else.
 
 ### The Chrome Extension
 
-The extension is probably the most interesting piece of the project. It is a Manifest V3 Chrome extension consisting of three files: a background service worker, a content script, and a popup.
+The extension is Manifest V3 and has three parts: a background service worker, a content script, and a popup.
 
-**The background service worker** (`background.js`) is the brain of the extension. It handles all communication with the API and manages the session token in `chrome.storage.local`. The reason the API calls live in the background worker rather than the popup is that service workers persist across popup opens and closes, so the token stays in storage and the worker is always there to use it. The popup and content script communicate with the worker via `chrome.runtime.sendMessage`, sending typed messages like `LOGIN`, `GET_ITEMS`, `GET_MATCHING`, and `SAVE_ITEM`.
+**The background service worker** (`background.js`) handles all API calls and keeps the session JWT in `chrome.storage.local`. The popup and content script communicate with it via `chrome.runtime.sendMessage` using typed messages (`LOGIN`, `GET_ITEMS`, `GET_MATCHING`, `SAVE_ITEM`).
 
-**Encryption** is handled entirely in the browser using the Web Crypto API with AES-GCM. When saving a credential, the extension derives an AES-256 key from the user's password hash and their vault ID using SHA-256, then encrypts the username and password together as a JSON object. The IV is randomly generated for each encryption and prepended to the ciphertext before base64 encoding. The API stores this opaque blob and never sees the plaintext. It couldn't decrypt it even if it wanted to, because the key is derived from the master password that only the user knows.
+**Encryption** uses the Web Crypto API with AES-256-GCM. The key is derived client-side from the password hash and vault ID — two values the server never has together — so the API stores only ciphertext it cannot decrypt.
 
-**The content script** (`content.js`) runs on every page after it loads. It checks with the background worker whether there are any saved credentials matching the current site's origin. If there are, it injects a small autofill banner at the top of the page offering to fill the username and password fields. The matching is done by comparing the saved `websiteUrl` to `window.location.origin`, so `https://github.com` matches any GitHub URL regardless of path. The content script also handles the case where older saved entries store the password as a plain string rather than a JSON object with username and password, keeping backwards compatibility with entries created before the joint encryption format was introduced.
+**The content script** runs on every page, checks for matching credentials by `window.location.origin`, and injects an autofill banner when a match is found. It handles both the current joint-encrypted format (username + password encrypted together as JSON) and older entries that stored the password as a plain string.
 
-**The popup** (`popup.html` + `popup.js`) is what you see when you click the extension icon. It shows a login form if no token is present, or the vault list if you are already authenticated. Each vault item has a Fill button that sends the credentials to the content script on the current tab. The popup also lets you save a new credential for the current site directly from the extension, without opening the web app.
+**The popup** shows a login form or the vault list depending on whether a token exists. Each item has a Fill button. You can also save new credentials for the current site directly from the popup.
 
 ## Running everything
 
+### Docker (self-hosted Linux / VPS)
+
+The cleanest way to run VaultPass on a server is with Docker Compose. The `docker-compose.yml` brings up the API and a SQL Server instance together.
+
+Copy the example env file and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+The three required values:
+
+```
+SA_PASSWORD=a_strong_sql_password
+JWT_SECRET=at_least_32_characters_change_this
+ASPNETCORE_ENVIRONMENT=Production
+```
+
+Then start everything:
+
+```bash
+docker compose up -d
+```
+
+The API comes up on port `5243`. Vault data is persisted in a named volume (`sqlserver_data`) that survives restarts and image rebuilds. To update:
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+The `Dockerfile` produces a self-contained .NET 10 image with no credentials baked in — the connection string and JWT secret are injected at runtime from the environment. If you also want the web app publicly accessible, point it at the server's public address and put both services behind an Nginx or Caddy reverse proxy.
+
 ### Windows
 
-The API background task starts automatically at every login via Task Scheduler. The entry is named `VaultPassAPI` and runs the published executable at `D:\desktop\VaultPass\publish\VaultPass.API\VaultPass.API.exe`.
+The API runs as a Task Scheduler background task that starts at login. The entry is named `VaultPassAPI` and points to the published executable.
 
-For the web app, run `dotnet run --project src/VaultPass.Web` and open `http://localhost:5002` in a browser. For development with hot reload and the Scalar API explorer, run the API from Visual Studio or with `dotnet run --project src/VaultPass.API`. The development launch settings bring it up on `https://localhost:7012` with the Scalar UI available at `/scalar/v1`.
+For the web app: `dotnet run --project src/VaultPass.Web` → `http://localhost:5002`.
 
-The Chrome extension is loaded unpacked from the `src/VaultPass.Extension` folder via `chrome://extensions` with Developer Mode enabled.
+For development with the Scalar API explorer: `dotnet run --project src/VaultPass.API` → `https://localhost:7012/scalar/v1`.
+
+The Chrome extension loads unpacked from `src/VaultPass.Extension` via `chrome://extensions` with Developer Mode on.
+
+The MAUI Windows desktop app publishes to a self-contained EXE: `dotnet publish src/VaultPass.MAUI/VaultPass.MAUI.csproj -f net10.0-windows10.0.19041.0 -c Release`.
 
 ### Android
 
-The app is distributed as a Release APK built with `dotnet publish src/VaultPass.MAUI/VaultPass.MAUI.csproj -f net10.0-android -c Release` and installed with `adb install`. Make sure the API is running before opening the app, and that the emulator or device can reach port 5243 on the host machine.
+Build and sign the APK:
 
-For emulator testing the address `10.0.2.2:5243` works out of the box. For a physical device on the same WiFi network, update `AppConfig.cs` to use the host machine's LAN IP before building.
+```bash
+dotnet publish src/VaultPass.MAUI/VaultPass.MAUI.csproj -f net10.0-android -c Release
+```
 
-### iOS
+The signed APK ends up in `bin/Release/net10.0-android/publish/`. Install with `adb install` or side-load directly. The mobile app is fully offline so no API setup is needed on the device.
 
-The MAUI app targets iOS as well. Run it from Visual Studio for Mac or Windows with a connected device or the iOS Simulator. The `AppConfig.cs` non-Android path resolves to `http://localhost:5243`, which works correctly on the iOS Simulator since it shares the host machine's network stack. For a physical iOS device, the same LAN IP approach as Android applies.
+### iOS / macOS
 
-### macOS
+Both targets require a Mac with Xcode and an Apple Developer account. Clone the repo on a Mac and run:
 
-The web app and the API both run cross-platform with no changes. Instead of Task Scheduler, run the API with `dotnet run --project src/VaultPass.API` and optionally set up a launchd agent to keep it running in the background.
+```bash
+# macOS
+dotnet publish src/VaultPass.MAUI/VaultPass.MAUI.csproj -f net10.0-maccatalyst -c Release
+
+# iOS
+dotnet publish src/VaultPass.MAUI/VaultPass.MAUI.csproj -f net10.0-ios -c Release
+```
+
+These builds cannot be produced on Windows — the iOS and macOS SDKs ship only with Xcode.
 
 ## Security model
 
-The master password never leaves the device in plaintext. The client hashes it with SHA-256 before sending it to the API for authentication. The API stores only that hash, which it re-hashes internally before persisting.
+**Web and extension clients:** The master password is hashed with SHA-256 before it leaves the device. The API stores only that hash, re-hashed internally. Vault items are encrypted client-side with AES-256-GCM before being sent to the API. The encryption key is derived from the password hash and vault ID — two values never stored together anywhere — so a stolen database is useless without the master password.
 
-Vault items are encrypted client-side before being sent to the API. The encryption key is derived from the password hash and the vault ID, two values that are never stored together anywhere, so the server-side database contains only ciphertext. If someone extracted the database, they would have no way to decrypt the contents without the master password.
+**MAUI (offline):** There is no master password in the traditional sense. A 4-digit PIN unlocks the device's local vault. The PIN hash is salted per device so it cannot be brute-forced across devices. The SQLite database on disk is not separately encrypted at this point — the security boundary is the device's own storage encryption (Android's FBE, iOS data protection, Windows DPAPI). For a threat model that assumes physical device access, the next step would be SQLCipher.
 
-The JWT secret is defined in `appsettings.json`. In a real deployment this should be rotated and stored in an environment variable or a secrets manager, not committed to the repository.
+**Recovery codes:** The 24-character recovery code is the only way to reset the PIN without losing vault access. It is hashed with SHA-256 and the hash is the only thing stored. The raw code is shown once during setup and never retrievable again.
+
+**JWT secret:** In production deployments the secret must come from an environment variable, not a config file. The `appsettings.json` in this repo is gitignored; the `.env.example` shows the expected variable name.

@@ -1,0 +1,40 @@
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      SA_PASSWORD: "${SQL_PASSWORD}"
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Express"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqldata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"${SQL_PASSWORD}\" -C -Q \"SELECT 1\" || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5243:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Server=db;Database=VaultPassDb;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True;"
+      JwtSettings__SecretKey: "${JWT_SECRET}"
+      JwtSettings__Issuer: "VaultPass.API"
+      JwtSettings__Audience: "VaultPass.Clients"
+      JwtSettings__ExpiryMinutes: "60"
+      CorsOrigins: "${CORS_ORIGINS:-http://localhost:5002}"
+      ASPNETCORE_URLS: "http://+:8080"
+      Urls: "http://+:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  sqldata:

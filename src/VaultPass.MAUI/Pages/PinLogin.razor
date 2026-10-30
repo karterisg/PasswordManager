@@ -1,0 +1,177 @@
+@page "/pin-login"
+@inject AuthService Auth
+@inject BiometricService Biometric
+@inject SecureStorageService Storage
+@inject NavigationManager Nav
+
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-logo" @onclick="OnLogoClick" style="cursor:default;user-select:none">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="11" width="18" height="11" rx="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+        </div>
+        <h1>VaultPass</h1>
+
+        @if (_biometricAvailable && _biometricEnabled)
+        {
+            <button class="btn-biometric" @onclick="TryBiometric">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M12 3C7.03 3 3 7.03 3 12s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9z"/>
+                    <path d="M12 8c-2.21 0-4 1.79-4 4"/>
+                    <path d="M12 8c2.21 0 4 1.79 4 4 0 1.48-.81 2.77-2 3.46"/>
+                    <path d="M12 8v1"/>
+                    <circle cx="12" cy="12" r="1"/>
+                </svg>
+                <span>Use Fingerprint / Face ID</span>
+            </button>
+            <div class="pin-divider">or enter PIN</div>
+        }
+
+        <p class="auth-subtitle">Enter your PIN to unlock</p>
+
+        @if (_error is not null)
+        {
+            <div class="alert-error">@_error</div>
+        }
+
+        <div class="pin-input-row">
+            @for (int i = 0; i < 4; i++)
+            {
+                var idx = i;
+                <input type="password" inputmode="numeric" maxlength="1"
+                       class="pin-digit @(_pin.Length > idx ? "filled" : "")"
+                       @onkeydown="@((e) => OnKey(e, idx))"
+                       @ref="_inputs[idx]" />
+            }
+        </div>
+
+        @* Recovery access: long-press/right-click logo to reveal *@
+        @if (_showRecoveryLink)
+        {
+            <button class="btn-link" style="color:#ef4444;font-size:12px" @onclick='() => Nav.NavigateTo("/recovery-reset")'>Reset PIN with recovery code</button>
+        }
+
+        @if (_showBiometricPrompt)
+        {
+            <div class="biometric-prompt">
+                <p>Enable fingerprint / Face ID for future unlocks?</p>
+                <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+                    <button class="btn btn-primary" @onclick="EnableBiometric">Yes</button>
+                    <button class="btn btn-ghost" @onclick="DismissBiometricPrompt">No</button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string _pin = "";
+    private string? _error;
+    private ElementReference[] _inputs = new ElementReference[4];
+    private bool _biometricAvailable;
+    private bool _biometricEnabled;
+    private bool _showBiometricPrompt;
+    private bool _showRecoveryLink;
+    private int _logoClickCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _biometricAvailable = await Biometric.IsAvailableAsync();
+        _biometricEnabled = await Storage.GetAsync("biometric_enabled") == "true";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await _inputs[0].FocusAsync();
+            if (_biometricAvailable && _biometricEnabled)
+                await TryBiometric();
+        }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e, int idx)
+    {
+        if (e.Key.Length == 1 && e.Key[0] >= '0' && e.Key[0] <= '9' && _pin.Length < 4)
+        {
+            _pin += e.Key;
+            if (_pin.Length < 4)
+                await _inputs[_pin.Length].FocusAsync();
+            else
+                await TryUnlock();
+        }
+        else if (e.Key == "Backspace" && _pin.Length > 0)
+        {
+            _pin = _pin[..^1];
+            _error = null;
+        }
+    }
+
+    private async Task TryUnlock()
+    {
+        if (await Auth.VerifyPinAsync(_pin))
+        {
+            var encKey = await Auth.DeriveEncKeyAsync(_pin);
+            await Storage.SetSessionAsync("enc_key", encKey);
+            await Auth.UnlockAsync();
+            // Offer biometric setup if available but not yet configured
+            var configured = await Storage.GetAsync("biometric_enabled");
+            if (_biometricAvailable && configured is null)
+            {
+                _showBiometricPrompt = true;
+                StateHasChanged();
+            }
+            else
+            {
+                Nav.NavigateTo("/dashboard", true);
+            }
+        }
+        else
+        {
+            _error = "Incorrect PIN";
+            _pin = "";
+            StateHasChanged();
+            await Task.Delay(50);
+            await _inputs[0].FocusAsync();
+        }
+    }
+
+    private async Task TryBiometric()
+    {
+        if (await Biometric.AuthenticateAsync())
+        {
+            await Auth.UnlockAsync();
+            Nav.NavigateTo("/dashboard", true);
+        }
+        else
+        {
+            _error = "Biometric failed. Enter your PIN.";
+            StateHasChanged();
+        }
+    }
+
+    private async Task EnableBiometric()
+    {
+        await Storage.SetAsync("biometric_enabled", "true");
+        Nav.NavigateTo("/dashboard", true);
+    }
+
+    private async Task DismissBiometricPrompt()
+    {
+        await Storage.SetAsync("biometric_enabled", "false");
+        Nav.NavigateTo("/dashboard", true);
+    }
+
+    private void OnLogoClick()
+    {
+        _logoClickCount++;
+        if (_logoClickCount >= 5)
+        {
+            _showRecoveryLink = true;
+            _logoClickCount = 0;
+            StateHasChanged();
+        }
+    }
+}

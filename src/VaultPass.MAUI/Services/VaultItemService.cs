@@ -1,117 +1,132 @@
-// Handles all vault item API calls (list, create, delete).
-// Functionally identical to the Web version, with one difference:
-// it depends on SecureStorageService instead of LocalStorageService
-// to read the JWT token for the Authorization header.
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
+using VaultPass.MAUI.Data;
 using VaultPass.MAUI.Models;
 
 namespace VaultPass.MAUI.Services;
 
 public class VaultItemService
 {
-    private readonly HttpClient _http;
-    private readonly SecureStorageService _storage;
+    private readonly LocalDatabase _db;
 
-    public VaultItemService(HttpClient http, SecureStorageService storage)
-    {
-        _http = http;
-        _storage = storage;
-    }
+    public VaultItemService(LocalDatabase db) => _db = db;
 
-    // GET /api/vaultitems?vaultId={vaultId} — returns all items in the vault
     public async Task<List<VaultItemModel>> GetItemsAsync(Guid vaultId)
     {
-        await SetAuthHeader();
-        var response = await _http.GetAsync($"api/vaultitems?vaultId={vaultId}");
-        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            throw new UnauthorizedAccessException();
-        var result = await response.Content.ReadFromJsonAsync<List<VaultItemModel>>();
-        return result ?? [];
+        var items = await _db.GetItemsAsync();
+        var templates = BuiltInTemplates.GetAll();
+        return items.Select(x =>
+        {
+            var tmpl = x.TemplateName is not null
+                ? templates.FirstOrDefault(t => t.Name == x.TemplateName)
+                : null;
+            return new VaultItemModel(
+                x.Id, vaultId, x.Name, x.Type, x.EncryptedData,
+                x.WebsiteUrl, x.IsFavorite, x.IsHiddenInTravelMode, tmpl?.Id);
+        }).ToList();
     }
 
-    // POST /api/vaultitems — creates a new vault item (password entry)
     public async Task<bool> CreateItemAsync(CreateVaultItemRequest request)
     {
-        await SetAuthHeader();
-        var response = await _http.PostAsJsonAsync("api/vaultitems", request);
-        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            throw new UnauthorizedAccessException();
-        return response.IsSuccessStatusCode;
+        var templates = BuiltInTemplates.GetAll();
+        var tmplName = request.TemplateId.HasValue
+            ? templates.FirstOrDefault(t => t.Id == request.TemplateId)?.Name
+            : null;
+        var item = new LocalVaultItem
+        {
+            Id = Guid.NewGuid(),
+            Name = request.Name,
+            Type = request.Type,
+            EncryptedData = request.EncryptedData,
+            WebsiteUrl = request.WebsiteUrl,
+            TemplateName = tmplName
+        };
+        await _db.SaveItemAsync(item);
+        return true;
     }
 
     public async Task<bool> UpdateItemAsync(Guid id, string name, string encryptedData, string? websiteUrl)
     {
-        await SetAuthHeader();
-        var response = await _http.PutAsJsonAsync($"api/vaultitems/{id}",
-            new { Id = id, Name = name, EncryptedData = encryptedData, WebsiteUrl = websiteUrl });
-        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException();
-        return response.IsSuccessStatusCode;
+        var item = await _db.GetItemAsync(id);
+        if (item is null) return false;
+
+        await _db.SaveHistoryAsync(new LocalVaultItemHistory
+        {
+            VaultItemId = id,
+            EncryptedData = item.EncryptedData
+        });
+
+        item.Name = name;
+        item.EncryptedData = encryptedData;
+        item.WebsiteUrl = websiteUrl;
+        await _db.SaveItemAsync(item);
+        return true;
     }
 
     public async Task<bool> DeleteItemAsync(Guid id)
     {
-        await SetAuthHeader();
-        var response = await _http.DeleteAsync($"api/vaultitems/{id}");
-        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            throw new UnauthorizedAccessException();
-        return response.IsSuccessStatusCode;
+        await _db.DeleteItemAsync(id);
+        return true;
     }
 
-    public async Task<List<ItemTemplateModel>> GetTemplatesAsync(Guid vaultId)
+    public Task<List<ItemTemplateModel>> GetTemplatesAsync(Guid vaultId)
+        => Task.FromResult(BuiltInTemplates.GetAll());
+
+    private static class BuiltInTemplates
     {
-        await SetAuthHeader();
-        var response = await _http.GetAsync($"api/itemtemplates?vaultId={vaultId}");
-        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException();
-        return await response.Content.ReadFromJsonAsync<List<ItemTemplateModel>>() ?? [];
+        public static List<ItemTemplateModel> GetAll() =>
+        [
+            T("Password", "🔑", [
+                F("Username", "email"), F("Password", "password"), F("Website", "url"), F("Notes", "note")]),
+            T("Credit Card", "💳", [
+                F("Cardholder", "text"), F("Card Number", "text"), F("Expiry Date", "date"), F("CVV", "password"), F("PIN", "password")]),
+            T("Secure Note", "📝", [
+                F("Title", "text"), F("Content", "note")]),
+            T("SSH Key", "🖥️", [
+                F("Host", "text"), F("Username", "text"), F("Private Key", "password"), F("Passphrase", "password")]),
+            T("2FA / TOTP", "🔐", [
+                F("Account", "text"), F("Secret Key", "totp"), F("Backup Codes", "note")]),
+            T("Flight Ticket", "✈️", [
+                F("Booking Reference", "text"), F("Airline", "text"), F("Flight Number", "text"),
+                F("Departure", "text"), F("Arrival", "text"), F("Date", "date"), F("Passenger", "text"), F("Seat", "text")]),
+            T("Ticket / Event", "🎟️", [
+                F("Event", "text"), F("Date", "date"), F("Venue", "text"), F("Seat", "text")]),
+            T("QR Code", "▣", [
+                F("Name", "text"), F("Content", "text")]),
+            T("API Key", "⚙️", [
+                F("Service", "text"), F("Key", "password"), F("Expiry", "date"), F("Notes", "note")]),
+            T("Bank Account", "🏦", [
+                F("Bank", "text"), F("IBAN", "text"), F("Account Number", "text"), F("Username", "text"), F("Password", "password")]),
+            T("Identity / Passport", "🪪", [
+                F("Full Name", "text"), F("Document Number", "text"), F("Expiry Date", "date"), F("Nationality", "text"), F("Notes", "note")]),
+        ];
+
+        private static ItemTemplateModel T(string name, string icon, List<ItemTemplateFieldModel> fields)
+            => new(Guid.NewGuid(), name, icon, true, fields);
+
+        private static ItemTemplateFieldModel F(string name, string type, int order = 0)
+            => new(Guid.NewGuid(), name, type, type is "password" or "note" or "totp", false, order);
     }
 
     public async Task<List<VaultItemHistoryModel>> GetHistoryAsync(Guid itemId)
     {
-        await SetAuthHeader();
-        var response = await _http.GetAsync($"api/vaultitems/{itemId}/history");
-        return await response.Content.ReadFromJsonAsync<List<VaultItemHistoryModel>>() ?? [];
+        var history = await _db.GetHistoryAsync(itemId);
+        return history.Select(x => new VaultItemHistoryModel(x.Id, x.EncryptedData, x.CreatedAt)).ToList();
     }
 
-    public async Task<List<ExportItemModel>> ExportAsync(Guid vaultId)
-    {
-        await SetAuthHeader();
-        return await _http.GetFromJsonAsync<List<ExportItemModel>>($"api/vaultitems/export?vaultId={vaultId}") ?? [];
-    }
+    public Task<List<ExportItemModel>> ExportAsync(Guid vaultId)
+        => Task.FromResult(new List<ExportItemModel>());
 
-    public async Task<string?> CreateShareAsync(Guid itemId, int expiryHours = 24, int maxUses = 1)
-    {
-        await SetAuthHeader();
-        var response = await _http.PostAsJsonAsync("api/share",
-            new { VaultItemId = itemId, ExpiryHours = expiryHours, MaxUses = maxUses });
-        if (!response.IsSuccessStatusCode) return null;
-        var result = await response.Content.ReadFromJsonAsync<ShareResult>();
-        return result?.Token;
-    }
+    public Task<string?> CreateShareAsync(Guid itemId, int expiryHours = 24, int maxUses = 1)
+        => Task.FromResult<string?>(null);
 
-    public async Task<bool> SetTravelModeAsync(Guid vaultId, bool enabled)
-    {
-        await SetAuthHeader();
-        var response = await _http.PatchAsJsonAsync($"api/vault/{vaultId}/travel-mode", new { Enabled = enabled });
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> SetTravelModeAsync(Guid vaultId, bool enabled)
+        => Task.FromResult(true);
 
     public async Task<bool> SetItemTravelHiddenAsync(Guid itemId, bool hidden)
     {
-        await SetAuthHeader();
-        var response = await _http.PatchAsJsonAsync($"api/vaultitems/{itemId}/travel-hidden", new { Hidden = hidden });
-        return response.IsSuccessStatusCode;
-    }
-
-    private record ShareResult(string Token);
-
-    // Reads the stored JWT token and attaches it as a Bearer Authorization header.
-    // Called before every request because the token may change after re-login.
-    private async Task SetAuthHeader()
-    {
-        var token = await _storage.GetAsync("token");
-        if (token is not null)
-            _http.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", token);
+        var item = await _db.GetItemAsync(itemId);
+        if (item is null) return false;
+        item.IsHiddenInTravelMode = hidden;
+        await _db.SaveItemAsync(item);
+        return true;
     }
 }

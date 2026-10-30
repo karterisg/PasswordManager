@@ -4,17 +4,22 @@
 // We don't need to override anything here; the base class handles it all.
 using Android.App;
 using Android.Content.PM;
+using Android.OS;
+using Plugin.Fingerprint;
 
 namespace VaultPass.MAUI;
 
 [Activity(
-    Theme = "@style/Maui.SplashTheme",   // Shows the splash screen while the app loads
-    MainLauncher = true,                  // This is the first Activity Android opens
-    // Tells Android not to recreate the Activity on these configuration changes —
-    // MAUI handles them internally instead
+    Theme = "@style/Maui.SplashTheme",
+    MainLauncher = true,
     ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation |
                            ConfigChanges.UiMode | ConfigChanges.ScreenLayout |
                            ConfigChanges.SmallestScreenSize | ConfigChanges.Density)]
 public class MainActivity : MauiAppCompatActivity
 {
+    protected override void OnCreate(Bundle? savedInstanceState)
+    {
+        base.OnCreate(savedInstanceState);
+        CrossFingerprint.SetCurrentActivityResolver(() => this);
+    }
 }

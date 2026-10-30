@@ -1,0 +1,131 @@
+@page "/pin-setup"
+@inject AuthService Auth
+@inject SecureStorageService Storage
+@inject NavigationManager Nav
+
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-logo">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="11" width="18" height="11" rx="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+        </div>
+        <h1>VaultPass</h1>
+
+        @if (!_confirming)
+        {
+            <p class="auth-subtitle">Create a 4-digit PIN to secure your vault</p>
+            @if (_error is not null)
+            {
+                <div class="alert-error">@_error</div>
+            }
+            <div class="pin-input-row">
+                @for (int i = 0; i < 4; i++)
+                {
+                    var idx = i;
+                    <input type="password" inputmode="numeric" maxlength="1"
+                           class="pin-digit @(_pin.Length > idx ? "filled" : "")"
+                           @onkeydown="@((e) => OnKey(e, idx))"
+                           @ref="_inputs[idx]" />
+                }
+            </div>
+        }
+        else
+        {
+            <p class="auth-subtitle">Confirm your PIN</p>
+            @if (_error is not null)
+            {
+                <div class="alert-error">@_error</div>
+            }
+            <div class="pin-input-row">
+                @for (int i = 0; i < 4; i++)
+                {
+                    var idx = i;
+                    <input type="password" inputmode="numeric" maxlength="1"
+                           class="pin-digit @(_confirm.Length > idx ? "filled" : "")"
+                           @onkeydown="@((e) => OnConfirmKey(e, idx))"
+                           @ref="_confirmInputs[idx]" />
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string _pin = "";
+    private string _confirm = "";
+    private string? _error;
+    private bool _confirming;
+    private ElementReference[] _inputs = new ElementReference[4];
+    private ElementReference[] _confirmInputs = new ElementReference[4];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await _inputs[0].FocusAsync();
+    }
+
+    private async Task OnKey(KeyboardEventArgs e, int idx)
+    {
+        if (e.Key.Length == 1 && e.Key[0] >= '0' && e.Key[0] <= '9' && _pin.Length < 4)
+        {
+            _pin += e.Key;
+            if (_pin.Length < 4)
+                await _inputs[_pin.Length].FocusAsync();
+            else
+            {
+                _confirming = true;
+                StateHasChanged();
+                await Task.Delay(50);
+                await _confirmInputs[0].FocusAsync();
+            }
+        }
+        else if (e.Key == "Backspace" && _pin.Length > 0)
+        {
+            _pin = _pin[..^1];
+            _error = null;
+        }
+    }
+
+    private async Task OnConfirmKey(KeyboardEventArgs e, int idx)
+    {
+        if (e.Key.Length == 1 && e.Key[0] >= '0' && e.Key[0] <= '9' && _confirm.Length < 4)
+        {
+            _confirm += e.Key;
+            if (_confirm.Length < 4)
+                await _confirmInputs[_confirm.Length].FocusAsync();
+            else
+                await ConfirmPin();
+        }
+        else if (e.Key == "Backspace" && _confirm.Length > 0)
+        {
+            _confirm = _confirm[..^1];
+            _error = null;
+        }
+    }
+
+    private async Task ConfirmPin()
+    {
+        if (_pin != _confirm)
+        {
+            _error = "PINs don't match. Try again.";
+            _pin = "";
+            _confirm = "";
+            _confirming = false;
+            StateHasChanged();
+            await Task.Delay(50);
+            await _inputs[0].FocusAsync();
+            return;
+        }
+        await Auth.SetPinAsync(_pin);
+        var encKey = await Auth.DeriveEncKeyAsync(_pin);
+        await Storage.SetSessionAsync("enc_key", encKey);
+        await Auth.UnlockAsync();
+        // Generate and save recovery code, then show it to user
+        var recoveryCode = Auth.GenerateRecoveryCode();
+        await Auth.SaveRecoveryCodeAsync(recoveryCode);
+        RecoveryCodeState.PendingCode = recoveryCode;
+        Nav.NavigateTo("/recovery-show", true);
+    }
+}

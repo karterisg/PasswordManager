@@ -1,6 +1,7 @@
 ﻿@page "/dashboard"
 @using VaultPass.Web.Services
 @using VaultPass.Web.Models
+@using VaultPass.Web.Shared
 @using System.Text.Json
 @inject VaultItemService VaultItemService
 @inject LocalStorageService LocalStorage
@@ -8,30 +9,76 @@
 @inject IJSRuntime JS
 
 <div class="dashboard">
-    <div class="topbar">
+
+    <!-- Topbar -->
+    <header class="topbar">
         <div class="topbar-brand">
-            <div class="topbar-brand-icon"><img src="favicon.png" style="width:100%;height:100%;object-fit:contain" /></div>
+            <div class="topbar-brand-icon">
+                <img src="favicon.png" style="width:100%;height:100%;object-fit:contain" alt="VaultPass" />
+            </div>
             VaultPass
         </div>
-        <div style="display:flex;gap:8px;align-items:center">
+
+        <div class="topbar-actions">
             @if (_travelMode)
             {
-                <span style="font-size:12px;background:#f59e0b;color:#fff;padding:3px 10px;border-radius:20px;font-weight:600">✈ Travel Mode</span>
+                <span class="badge badge-warning">Travel Mode</span>
             }
-            <button type="button" class="btn btn-secondary" @onclick="ToggleTravelMode" title="Travel Mode">✈</button>
-            <button type="button" class="btn btn-secondary" @onclick="OpenSecurityModal" title="Security Dashboard">🛡</button>
-            <button type="button" class="btn btn-secondary" @onclick="ExportVault" title="Export">⬇ Export</button>
-            <button type="button" class="btn btn-secondary" @onclick="() => _showImportModal = true" title="Import">⬆ Import</button>
-            <button type="button" class="btn btn-secondary" @onclick="Logout">Sign Out</button>
+            <button type="button" class="btn btn-ghost btn-icon" title="@(_travelMode ? "Disable Travel Mode" : "Enable Travel Mode")"
+                    @onclick="ToggleTravelMode">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21 4 19 4c-.34 0-.7.07-1.04.2" />
+                    <path d="m3 11 8 2 4-4-5-6" />
+                    <path d="M11.1 18.1 5 21l1-5" />
+                </svg>
+            </button>
+            <button type="button" class="btn btn-ghost btn-icon" title="Security Dashboard"
+                    @onclick="OpenSecurityModal">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+            </button>
+            <div class="topbar-divider"></div>
+            <button type="button" class="btn btn-ghost btn-icon" title="Export vault"
+                    @onclick="ExportVault">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+            </button>
+            <button type="button" class="btn btn-ghost btn-icon" title="Import passwords"
+                    @onclick="() => _showImportModal = true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+            </button>
+            <div class="topbar-divider"></div>
+            <button type="button" class="btn btn-secondary" @onclick="Logout" style="font-size:13px;padding:6px 12px">
+                Sign out
+            </button>
         </div>
-    </div>
+    </header>
 
-    <div class="dashboard-content">
+    <!-- Content -->
+    <main class="dashboard-content">
         <div class="section-header">
             <h2>My Vault</h2>
-            <button type="button" class="btn btn-primary" style="width:auto" @onclick="OpenAddModal">+ Add Item</button>
+            <button type="button" class="btn btn-primary" style="width:auto;margin:0;padding:8px 16px"
+                    @onclick="OpenAddModal">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add Item
+            </button>
         </div>
 
+        @if (!string.IsNullOrEmpty(_successMessage))
+        {
+            <div class="alert-success">@_successMessage</div>
+        }
         @if (!string.IsNullOrEmpty(_globalError))
         {
             <div class="alert-error">@_globalError</div>
@@ -39,14 +86,19 @@
 
         @if (_loading)
         {
-            <p style="color: var(--text-secondary)">Loading...</p>
+            <p style="color:var(--text-secondary);padding:20px 0">Loading vault…</p>
         }
         else if (_visibleItems.Count == 0)
         {
             <div class="empty-state">
-                <div class="empty-state-icon">🔑</div>
-                <h3>No saved items yet</h3>
-                <p>Click "+ Add Item" to save your first one.</p>
+                <div class="empty-state-icon">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                </div>
+                <h3>Your vault is empty</h3>
+                <p>Click "Add Item" to save your first password or secret.</p>
             </div>
         }
         else
@@ -63,6 +115,9 @@
                         @foreach (var item in group.Items)
                         {
                             var itemId = item.Id;
+                            var revealed = _revealedItems.Contains(itemId);
+                            var copied = _copiedId == itemId;
+                            var shared = _sharedTokens.ContainsKey(itemId);
                             <div class="vault-item @(item.IsHiddenInTravelMode && _travelMode ? "travel-hidden" : "")">
                                 <div class="vault-item-icon">@GetItemIcon(item)</div>
                                 <div class="vault-item-info">
@@ -71,38 +126,115 @@
                                     {
                                         <div class="vault-item-url">@item.WebsiteUrl</div>
                                     }
-                                    @if (_revealedItems.Contains(itemId) && _decryptedFields.TryGetValue(itemId, out var fields))
+                                    @if (revealed && _decryptedFields.TryGetValue(itemId, out var fields))
                                     {
                                         <div class="vault-item-fields">
                                             @foreach (var kv in fields)
                                             {
-                                                <div class="vault-item-field"><span class="field-label">@kv.Key:</span> @kv.Value</div>
+                                                <div class="vault-item-field">
+                                                    <span class="field-label">@kv.Key</span>
+                                                    <span class="field-value">@kv.Value</span>
+                                                </div>
                                             }
                                         </div>
                                     }
                                 </div>
                                 <div class="vault-item-actions">
-                                    <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
+                                    <!-- Reveal -->
+                                    <button type="button" class="btn btn-ghost btn-icon"
+                                            title="@(revealed ? "Hide" : "Show")"
                                             @onclick="() => ToggleReveal(itemId, item.EncryptedData)">
-                                        @(_revealedItems.Contains(itemId) ? "Hide" : "Show")
+                                        @if (revealed)
+                                        {
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                                                <line x1="1" y1="1" x2="23" y2="23" />
+                                            </svg>
+                                        }
+                                        else
+                                        {
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                                <circle cx="12" cy="12" r="3" />
+                                            </svg>
+                                        }
                                     </button>
-                                    <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
+                                    <!-- Copy -->
+                                    <button type="button" class="btn btn-ghost btn-icon"
+                                            title="@(copied ? "Copied!" : "Copy password")"
                                             @onclick="() => CopyFirst(itemId, item.EncryptedData)">
-                                        @(_copiedId == itemId ? "✓" : "Copy")
+                                        @if (copied)
+                                        {
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                        }
+                                        else
+                                        {
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                            </svg>
+                                        }
                                     </button>
-                                    <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
-                                            @onclick="() => OpenEditModal(item)">Edit</button>
-                                    <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
-                                            @onclick="() => OpenHistoryModal(itemId)">🕐</button>
-                                    <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
+                                    <!-- Edit -->
+                                    <button type="button" class="btn btn-ghost btn-icon" title="Edit"
+                                            @onclick="() => OpenEditModal(item)">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                        </svg>
+                                    </button>
+                                    <!-- History -->
+                                    <button type="button" class="btn btn-ghost btn-icon" title="View history"
+                                            @onclick="() => OpenHistoryModal(itemId)">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="12 8 12 12 14 14" />
+                                            <path d="M3.05 11a9 9 0 1 0 .5-4" />
+                                            <polyline points="3 3 3 7 7 7" />
+                                        </svg>
+                                    </button>
+                                    <!-- Share -->
+                                    <button type="button" class="btn btn-ghost btn-icon"
+                                            title="@(shared ? "Link copied!" : "Share item")"
                                             @onclick="() => ShareItem(itemId)">
-                                        @(_sharedTokens.TryGetValue(itemId, out var tok) ? "📋 Copied!" : "Share")
+                                        @if (shared)
+                                        {
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                        }
+                                        else
+                                        {
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+                                                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                                                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                                            </svg>
+                                        }
                                     </button>
-                                    <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
+                                    <!-- Travel hidden toggle -->
+                                    <button type="button" class="btn btn-ghost btn-icon"
+                                            title="@(item.IsHiddenInTravelMode ? "Hidden in Travel Mode" : "Visible in Travel Mode")"
                                             @onclick="() => ToggleItemTravelHidden(item)">
-                                        @(item.IsHiddenInTravelMode ? "✈🔒" : "✈")
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                             stroke="@(item.IsHiddenInTravelMode ? "var(--warning)" : "currentColor")"
+                                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21 4 19 4c-.34 0-.7.07-1.04.2" />
+                                            <path d="m3 11 8 2 4-4-5-6" />
+                                            <path d="M11.1 18.1 5 21l1-5" />
+                                        </svg>
                                     </button>
-                                    <button type="button" class="btn btn-danger" @onclick="() => DeleteItem(itemId)">Delete</button>
+                                    <!-- Delete -->
+                                    <button type="button" class="btn btn-danger btn-icon" title="Delete"
+                                            @onclick="() => DeleteItem(itemId)">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                            <path d="M10 11v6" /><path d="M14 11v6" />
+                                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                        </svg>
+                                    </button>
                                 </div>
                             </div>
                         }
@@ -110,39 +242,49 @@
                 </div>
             }
         }
-    </div>
+    </main>
 </div>
 
-@* Template Picker Modal *@
+<!-- Template Picker Modal -->
 @if (_showTemplatePicker)
 {
     <div class="modal-overlay" @onclick="() => _showTemplatePicker = false">
-        <div class="modal" @onclick:stopPropagation="true" style="max-width:500px">
-            <h3>Choose Item Type</h3>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+        <div class="modal" @onclick:stopPropagation="true" style="max-width:480px">
+            <div class="modal-header">
+                <h3>Choose item type</h3>
+                <button type="button" class="modal-close" @onclick="() => _showTemplatePicker = false">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="template-grid">
+                @if (_templates.Count == 0)
+                {
+                    <p style="color:var(--text-secondary);grid-column:1/-1;text-align:center;padding:20px 0">Loading types…</p>
+                }
                 @foreach (var t in _templates)
                 {
                     var tmpl = t;
-                    <button type="button" class="btn btn-secondary" style="padding:14px;text-align:left;display:flex;align-items:center;gap:10px"
-                            @onclick="() => SelectTemplate(tmpl)">
-                        <span style="font-size:22px">@tmpl.Icon</span>
+                    <button type="button" class="template-btn" @onclick="() => SelectTemplate(tmpl)">
+                        <span class="template-btn-icon">@tmpl.Icon</span>
                         <span>@tmpl.Name</span>
                     </button>
                 }
-            </div>
-            <div style="margin-top:14px">
-                <button type="button" class="btn btn-secondary" @onclick="() => _showTemplatePicker = false">Cancel</button>
             </div>
         </div>
     </div>
 }
 
-@* Add / Edit Item Modal *@
+<!-- Add / Edit Item Modal -->
 @if (_showModal)
 {
     <div class="modal-overlay" @onclick="CloseModal">
         <div class="modal" @onclick:stopPropagation="true">
-            <h3>@(_editingItem is null ? $"Add {_selectedTemplate?.Name ?? "Item"}" : $"Edit {_editingItem.Name}")</h3>
+            <div class="modal-header">
+                <h3>@(_editingItem is null ? $"New {_selectedTemplate?.Name ?? "Item"}" : $"Edit — {_editingItem.Name}")</h3>
+                <button type="button" class="modal-close" @onclick="CloseModal">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
             @if (!string.IsNullOrEmpty(_addError))
             {
                 <div class="alert-error">@_addError</div>
@@ -152,7 +294,7 @@
                 <input class="form-control" placeholder="e.g. Gmail" @bind="_newName" />
             </div>
             <div class="form-group">
-                <label>Website URL (optional)</label>
+                <label>Website URL <span style="color:var(--text-tertiary);font-weight:400">(optional)</span></label>
                 <input class="form-control" placeholder="https://gmail.com" @bind="_newUrl" />
             </div>
 
@@ -162,7 +304,7 @@
                 {
                     var f = field;
                     <div class="form-group">
-                        <label>@f.Name @(f.IsRequired ? "*" : "")</label>
+                        <label>@f.Name @(f.IsRequired ? "" : "")</label>
                         @if (f.FieldType == "Password" || f.IsEncrypted)
                         {
                             <input class="form-control" type="password" placeholder="••••••••"
@@ -171,8 +313,7 @@
                         }
                         else if (f.FieldType == "Note")
                         {
-                            <textarea class="form-control" rows="3"
-                                      @bind="_fieldValues[f.Name]"></textarea>
+                            <textarea class="form-control" rows="3" @bind="_fieldValues[f.Name]"></textarea>
                         }
                         else
                         {
@@ -193,50 +334,65 @@
 
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
-                <button type="button" class="btn btn-primary" style="width:auto" @onclick="SaveItem" disabled="@_saving">@(_saving ? "Saving…" : "Save")</button>
+                <button type="button" class="btn btn-primary" @onclick="SaveItem" disabled="@_saving">
+                    @(_saving ? "Saving…" : "Save")
+                </button>
             </div>
         </div>
     </div>
 }
 
-@* History Modal *@
+<!-- History Modal -->
 @if (_showHistoryModal)
 {
     <div class="modal-overlay" @onclick="() => _showHistoryModal = false">
-        <div class="modal" @onclick:stopPropagation="true" style="max-width:500px">
-            <h3>Password History</h3>
+        <div class="modal" @onclick:stopPropagation="true" style="max-width:440px">
+            <div class="modal-header">
+                <h3>Item history</h3>
+                <button type="button" class="modal-close" @onclick="() => _showHistoryModal = false">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
             @if (_history.Count == 0)
             {
-                <p style="color:var(--text-secondary)">No history available.</p>
+                <p style="color:var(--text-secondary);font-size:14px">No previous versions.</p>
             }
             else
             {
-                @foreach (var h in _history)
+                @for (int i = 0; i < _history.Count; i++)
                 {
-                    <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
-                        <div style="font-size:12px;color:var(--text-secondary)">@h.CreatedAt.ToLocalTime().ToString("g")</div>
-                        <div style="font-family:monospace;font-size:13px;margin-top:4px">@h.EncryptedData[..Math.Min(40,h.EncryptedData.Length)]…</div>
+                    var h = _history[i];
+                    <div class="history-entry">
+                        <div class="history-entry-date">@h.CreatedAt.ToLocalTime().ToString("MMM d, yyyy · h:mm tt")</div>
+                        <div class="history-entry-label">Version @(_history.Count - i)</div>
                     </div>
                 }
             }
-            <button type="button" class="btn btn-secondary" @onclick="() => _showHistoryModal = false">Close</button>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" @onclick="() => _showHistoryModal = false">Close</button>
+            </div>
         </div>
     </div>
 }
 
-@* Security Dashboard Modal *@
+<!-- Security Modal -->
 @if (_showSecurityModal)
 {
     <div class="modal-overlay" @onclick="() => _showSecurityModal = false">
-        <div class="modal" @onclick:stopPropagation="true" style="max-width:560px">
-            <h3>🛡 Security Dashboard</h3>
+        <div class="modal" @onclick:stopPropagation="true" style="max-width:520px">
+            <div class="modal-header">
+                <h3>Security overview</h3>
+                <button type="button" class="modal-close" @onclick="() => _showSecurityModal = false">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
             @if (_securityLoading)
             {
-                <p style="color:var(--text-secondary)">Analyzing...</p>
+                <p style="color:var(--text-secondary);font-size:14px">Analyzing your vault…</p>
             }
             else
             {
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:16px 0">
+                <div class="security-grid">
                     <div class="security-card">
                         <div class="security-score @(_weakCount > 0 ? "bad" : "good")">@_weakCount</div>
                         <div>Weak passwords</div>
@@ -252,33 +408,46 @@
                 </div>
                 @if (_weakItems.Count > 0)
                 {
-                    <h4 style="margin-bottom:8px">Weak passwords</h4>
+                    <p style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text-primary)">Items with weak passwords</p>
                     @foreach (var name in _weakItems)
                     {
-                        <div style="color:#ef4444;font-size:13px;margin-bottom:4px">⚠ @name</div>
+                        <div class="security-issue">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                            </svg>
+                            @name
+                        </div>
                     }
                 }
             }
-            <button type="button" class="btn btn-secondary" style="margin-top:16px" @onclick="() => _showSecurityModal = false">Close</button>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" @onclick="() => _showSecurityModal = false">Close</button>
+            </div>
         </div>
     </div>
 }
 
-@* Import Modal *@
+<!-- Import Modal -->
 @if (_showImportModal)
 {
     <div class="modal-overlay" @onclick="() => _showImportModal = false">
         <div class="modal" @onclick:stopPropagation="true" style="max-width:460px">
-            <h3>Import Passwords</h3>
-            <p style="font-size:13px;color:var(--text-secondary)">Paste exported VaultPass JSON below.</p>
-            <textarea class="form-control" rows="6" @bind="_importJson" style="font-family:monospace;font-size:12px"></textarea>
+            <div class="modal-header">
+                <h3>Import passwords</h3>
+                <button type="button" class="modal-close" @onclick="() => _showImportModal = false">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">Paste a previously exported VaultPass JSON below.</p>
+            <textarea class="form-control" rows="7" @bind="_importJson"
+                      style="font-family:'SF Mono','Cascadia Code',monospace;font-size:12px"></textarea>
             @if (!string.IsNullOrEmpty(_importError))
             {
-                <div class="alert-error" style="margin-top:8px">@_importError</div>
+                <div class="alert-error" style="margin-top:10px">@_importError</div>
             }
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" @onclick="() => _showImportModal = false">Cancel</button>
-                <button type="button" class="btn btn-primary" style="width:auto" @onclick="DoImport">Import</button>
+                <button type="button" class="btn btn-primary" @onclick="DoImport">Import</button>
             </div>
         </div>
     </div>
@@ -293,15 +462,14 @@
     private Guid _vaultId;
     private string? _encKeyBase64;
     private string _globalError = "";
+    private string _successMessage = "";
 
-    // modal state
     private bool _showTemplatePicker = false;
     private bool _showModal = false;
     private bool _showHistoryModal = false;
     private bool _showSecurityModal = false;
     private bool _showImportModal = false;
 
-    // add/edit
     private VaultItemModel? _editingItem;
     private ItemTemplateModel? _selectedTemplate;
     private string _newName = "";
@@ -310,22 +478,18 @@
     private string _addError = "";
     private Dictionary<string, string> _fieldValues = new();
 
-    // reveal / copy
     private HashSet<Guid> _revealedItems = [];
     private Dictionary<Guid, Dictionary<string, string>> _decryptedFields = [];
     private Guid _copiedId = Guid.Empty;
     private Dictionary<Guid, string> _sharedTokens = new();
 
-    // history
     private List<VaultItemHistoryModel> _history = [];
 
-    // security
     private bool _securityLoading = false;
     private int _weakCount = 0;
     private int _reusedCount = 0;
     private List<string> _weakItems = [];
 
-    // import
     private string _importJson = "";
     private string _importError = "";
 
@@ -338,7 +502,7 @@
         var token = await LocalStorage.GetAsync("token");
         if (token is null) { Navigation.NavigateTo("/login"); return; }
 
-        _vaultId = ParseVaultIdFromToken(token);
+        _vaultId = ClientUtils.ParseVaultIdFromToken(token);
         if (_vaultId == Guid.Empty) { Navigation.NavigateTo("/login"); return; }
 
         _encKeyBase64 = await LocalStorage.GetSessionAsync("enc_key");
@@ -347,10 +511,6 @@
         {
             _items = await VaultItemService.GetItemsAsync(_vaultId);
             _templates = await VaultItemService.GetTemplatesAsync(_vaultId);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            await Logout();
         }
         catch (Exception ex)
         {
@@ -458,27 +618,21 @@
 
     private async Task ToggleReveal(Guid id, string encryptedData)
     {
-        if (_revealedItems.Contains(id))
+        if (_revealedItems.Contains(id)) { _revealedItems.Remove(id); return; }
+
+        if (!_decryptedFields.ContainsKey(id))
         {
-            _revealedItems.Remove(id);
-        }
-        else
-        {
-            if (!_decryptedFields.ContainsKey(id))
+            var plain = await DecryptAsync(encryptedData);
+            Dictionary<string, string> fields;
+            try
             {
-                var plain = await DecryptAsync(encryptedData);
-                var fields = new Dictionary<string, string>();
-                try
-                {
-                    var parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(plain);
-                    if (parsed is not null) fields = parsed;
-                    else fields["Password"] = plain;
-                }
-                catch { fields["Password"] = plain; }
-                _decryptedFields[id] = fields;
+                var parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(plain);
+                fields = parsed ?? new Dictionary<string, string> { ["Password"] = plain };
             }
-            _revealedItems.Add(id);
+            catch { fields = new Dictionary<string, string> { ["Password"] = plain }; }
+            _decryptedFields[id] = fields;
         }
+        _revealedItems.Add(id);
     }
 
     private async Task CopyFirst(Guid itemId, string encryptedData)
@@ -556,14 +710,12 @@
         try
         {
             var items = JsonSerializer.Deserialize<List<ImportItemDto>>(_importJson);
-            if (items is null || items.Count == 0) { _importError = "No items found."; return; }
+            if (items is null || items.Count == 0) { _importError = "No items found in the file."; return; }
             var count = await VaultItemService.ImportAsync(_vaultId, items);
             _showImportModal = false;
             _importJson = "";
             _items = await VaultItemService.GetItemsAsync(_vaultId);
-            _globalError = $"Imported {count} items successfully.";
-            await Task.Delay(3000);
-            _globalError = "";
+            await ShowSuccess($"Successfully imported {count} item{(count == 1 ? "" : "s")}.");
         }
         catch (Exception ex)
         {
@@ -574,12 +726,13 @@
     private async Task OpenSecurityModal()
     {
         _showSecurityModal = true;
+        _securityLoading = true;
+        StateHasChanged();
         await RunSecurityAnalysis();
     }
 
     private async Task RunSecurityAnalysis()
     {
-        _securityLoading = true;
         _weakCount = 0; _reusedCount = 0; _weakItems = [];
         var passwords = new List<(string Name, string Plain)>();
 
@@ -595,9 +748,7 @@
                     pwd = d?.Values.FirstOrDefault() ?? plain;
                 }
                 catch { pwd = plain; }
-
-                if (!string.IsNullOrEmpty(pwd))
-                    passwords.Add((item.Name, pwd));
+                if (!string.IsNullOrEmpty(pwd)) passwords.Add((item.Name, pwd));
             }
             catch { }
         }
@@ -616,7 +767,14 @@
         _securityLoading = false;
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender) { }
+    private async Task ShowSuccess(string message)
+    {
+        _successMessage = message;
+        StateHasChanged();
+        await Task.Delay(3500);
+        _successMessage = "";
+        StateHasChanged();
+    }
 
     private async Task<string> EncryptAsync(string plaintext)
     {
@@ -633,12 +791,9 @@
 
     private string GetItemIcon(VaultItemModel item)
     {
-        if (item.TemplateId.HasValue)
-        {
-            var t = _templates.FirstOrDefault(t => t.Id == item.TemplateId);
-            return t?.Icon ?? "🔑";
-        }
-        return "🔑";
+        if (!item.TemplateId.HasValue) return "🔑";
+        var t = _templates.FirstOrDefault(t => t.Id == item.TemplateId);
+        return t?.Icon ?? "🔑";
     }
 
     private record VaultGroup(string Icon, string Name, List<VaultItemModel> Items);
@@ -646,38 +801,14 @@
     private List<VaultGroup> GetGroupedItems()
     {
         var groups = new List<VaultGroup>();
-        var templateGroups = _visibleItems
-            .Where(i => i.TemplateId.HasValue)
-            .GroupBy(i => i.TemplateId!.Value);
-
-        foreach (var g in templateGroups)
+        foreach (var g in _visibleItems.Where(i => i.TemplateId.HasValue).GroupBy(i => i.TemplateId!.Value))
         {
             var tmpl = _templates.FirstOrDefault(t => t.Id == g.Key);
-            if (tmpl is not null)
-                groups.Add(new VaultGroup(tmpl.Icon, tmpl.Name, g.ToList()));
+            if (tmpl is not null) groups.Add(new VaultGroup(tmpl.Icon, tmpl.Name, g.ToList()));
         }
-
         var untyped = _visibleItems.Where(i => !i.TemplateId.HasValue).ToList();
-        if (untyped.Count > 0)
-            groups.Add(new VaultGroup("🔑", "Passwords", untyped));
-
+        if (untyped.Count > 0) groups.Add(new VaultGroup("🔑", "Passwords", untyped));
         return groups;
-    }
-
-    private static Guid ParseVaultIdFromToken(string token)
-    {
-        try
-        {
-            var parts = token.Split('.');
-            if (parts.Length != 3) return Guid.Empty;
-            var payload = parts[1].Replace('-', '+').Replace('_', '/');
-            switch (payload.Length % 4) { case 2: payload += "=="; break; case 3: payload += "="; break; }
-            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("vaultId", out var v)) return Guid.Parse(v.GetString()!);
-            return Guid.Empty;
-        }
-        catch { return Guid.Empty; }
     }
 
     private async Task Logout()

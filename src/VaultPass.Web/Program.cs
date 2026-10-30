@@ -7,13 +7,13 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-//http client configuration for api calls
+var apiBaseAddress = builder.Configuration["ApiBaseAddress"] ?? "http://localhost:5243/";
+
 builder.Services.AddScoped(sp => new HttpClient
 {
-    BaseAddress = new Uri("http://localhost:5243/") //api url
+    BaseAddress = new Uri(apiBaseAddress)
 });
 
-// Service registration
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<VaultItemService>();
 builder.Services.AddScoped<LocalStorageService>();

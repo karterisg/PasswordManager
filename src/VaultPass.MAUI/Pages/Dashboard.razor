@@ -3,6 +3,7 @@
 @using System.Text.Json
 @inject VaultItemService VaultItemService
 @inject SecureStorageService Storage
+@inject AuthService Auth
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
@@ -293,11 +294,10 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var token = await Storage.GetAsync("token");
-        if (token is null) { Navigation.NavigateTo("/login"); return; }
+        if (!await Auth.IsUnlockedAsync()) { Navigation.NavigateTo("/pin-login"); return; }
 
-        _vaultId = ParseVaultIdFromToken(token);
-        if (_vaultId == Guid.Empty) { Navigation.NavigateTo("/login"); return; }
+        _vaultId = (await Auth.GetVaultIdAsync()) ?? Guid.Empty;
+        if (_vaultId == Guid.Empty) { Navigation.NavigateTo("/pin-login"); return; }
 
         _encKeyBase64 = await Storage.GetSessionAsync("enc_key");
 
@@ -527,26 +527,10 @@
         catch { return encryptedData; }
     }
 
-    private static Guid ParseVaultIdFromToken(string token)
+private async Task Logout()
     {
-        try
-        {
-            var parts = token.Split('.');
-            if (parts.Length != 3) return Guid.Empty;
-            var payload = parts[1].Replace('-', '+').Replace('_', '/');
-            switch (payload.Length % 4) { case 2: payload += "=="; break; case 3: payload += "="; break; }
-            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("vaultId", out var v)) return Guid.Parse(v.GetString()!);
-            return Guid.Empty;
-        }
-        catch { return Guid.Empty; }
-    }
-
-    private async Task Logout()
-    {
-        await Storage.RemoveAsync("token");
+        await Auth.LockAsync();
         await Storage.RemoveSessionAsync("enc_key");
-        Navigation.NavigateTo("/login");
+        Navigation.NavigateTo("/pin-login");
     }
 }

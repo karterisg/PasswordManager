@@ -465,3 +465,33 @@ body {
     right: 0.75rem;
     top: 0.5rem;
 }
+
+/* ── PIN Input ── */
+.pin-input-row {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin: 24px 0;
+}
+
+.pin-digit {
+    width: 56px;
+    height: 64px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 24px;
+    text-align: center;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.pin-digit:focus {
+    border-color: var(--accent);
+}
+
+.pin-digit.filled {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}

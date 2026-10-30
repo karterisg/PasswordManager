@@ -66,12 +66,14 @@ artifacts/
 
 # Sensitive/secret files - NEVER commit these
 secrets.json
-appsettings.json
+# Only ignore API appsettings (contains DB connection string + JWT secret)
+src/VaultPass.API/appsettings.json
+src/VaultPass.API/appsettings.Production.json
+src/VaultPass.API/appsettings.Development.json
 appsettings.secrets.json
-appsettings.Production.json
-appsettings.Development.json
 *.vault
 *.vaultdb
+.env
 
 # Publish output
 publish/

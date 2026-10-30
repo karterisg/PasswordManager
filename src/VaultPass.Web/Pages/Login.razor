@@ -1,5 +1,6 @@
 ﻿@page "/login"
 @using VaultPass.Web.Services
+@using VaultPass.Web.Shared
 @inject AuthService AuthService
 @inject LocalStorageService LocalStorage
 @inject NavigationManager Navigation
@@ -7,7 +8,7 @@
 <div class="auth-page">
     <div class="auth-card">
         <div class="auth-logo">
-            <img src="favicon.png" class="auth-logo-icon" style="object-fit:contain" />
+            <img src="favicon.png" class="auth-logo-icon" alt="VaultPass" />
             <h1>VaultPass</h1>
         </div>
         <h2>Welcome back</h2>
@@ -19,14 +20,18 @@
         }
 
         <div class="form-group">
-            <label>Email</label>
-            <input class="form-control" type="email" placeholder="you@example.com" @bind="_email" />
+            <label for="email">Email</label>
+            <input id="email" class="form-control" type="email" placeholder="you@example.com"
+                   @bind="_email" @onkeydown="OnKeyDown" />
         </div>
         <div class="form-group">
-            <label>Master Password</label>
-            <input class="form-control" type="password" placeholder="••••••••" @bind="_password" />
+            <label for="password">Master Password</label>
+            <input id="password" class="form-control" type="password" placeholder="••••••••"
+                   @bind="_password" @onkeydown="OnKeyDown" />
         </div>
-        <button class="btn btn-primary" @onclick="HandleLogin">Sign In</button>
+        <button class="btn btn-primary" @onclick="HandleLogin" disabled="@_loading">
+            @(_loading ? "Signing in…" : "Sign In")
+        </button>
 
         <p class="auth-footer">Don't have an account? <a href="/register">Create one</a></p>
     </div>
@@ -36,61 +41,53 @@
     private string _email = "";
     private string _password = "";
     private string _error = "";
+    private bool _loading = false;
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await HandleLogin();
+    }
 
     private async Task HandleLogin()
     {
+        if (_loading) return;
         _error = "";
-        var hash = ComputeSha256(_password);
-        var token = await AuthService.LoginAsync(_email, hash);
-
-        if (token is null)
+        if (string.IsNullOrWhiteSpace(_email) || string.IsNullOrWhiteSpace(_password))
         {
-            _error = "Invalid email or password.";
+            _error = "Please enter your email and password.";
             return;
         }
 
-        await LocalStorage.SetAsync("token", token);
-
-        var vaultId = ParseVaultIdFromToken(token);
-        if (vaultId != Guid.Empty)
-        {
-            var encKeyBase64 = EncryptionService.DeriveKeyBase64(hash, vaultId.ToString());
-            await LocalStorage.SetSessionAsync("enc_key", encKeyBase64);
-        }
-
-        Navigation.NavigateTo("/dashboard");
-    }
-
-    private static Guid ParseVaultIdFromToken(string token)
-    {
+        _loading = true;
         try
         {
-            var parts = token.Split('.');
-            if (parts.Length != 3) return Guid.Empty;
-            var payload = parts[1].Replace('-', '+').Replace('_', '/');
-            switch (payload.Length % 4)
+            var hash = ClientUtils.ComputeSha256(_password);
+            var token = await AuthService.LoginAsync(_email.Trim().ToLower(), hash);
+
+            if (token is null)
             {
-                case 2: payload += "=="; break;
-                case 3: payload += "="; break;
+                _error = "Invalid email or password.";
+                return;
             }
-            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("vaultId", out var prop))
-                return Guid.Parse(prop.GetString()!);
-            return Guid.Empty;
+
+            await LocalStorage.SetAsync("token", token);
+
+            var vaultId = ClientUtils.ParseVaultIdFromToken(token);
+            if (vaultId != Guid.Empty)
+            {
+                var encKeyBase64 = EncryptionService.DeriveKeyBase64(hash, vaultId.ToString());
+                await LocalStorage.SetSessionAsync("enc_key", encKeyBase64);
+            }
+
+            Navigation.NavigateTo("/dashboard");
         }
-        catch { return Guid.Empty; }
-    }
-
-
-    // Computes the SHA-256 hash of the input string.
-    // Source: Stack Overflow, "Hashing a string with SHA256"
-    // stackoverflow.com/questions/12416249/hashing-a-string-with-sha256
-    // Modified to return the hash in lowercase hexadecimal format.
-    private static string ComputeSha256(string input)
-    {
-        var bytes = System.Security.Cryptography.SHA256.HashData(
-            System.Text.Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(bytes).ToLower();
+        catch
+        {
+            _error = "Could not connect to the server. Please try again.";
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 }

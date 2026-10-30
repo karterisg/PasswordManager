@@ -1,0 +1,118 @@
+@page "/recovery-reset"
+@inject AuthService Auth
+@inject SecureStorageService Storage
+@inject NavigationManager Nav
+
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-logo">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="11" width="18" height="11" rx="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+        </div>
+        <h1>Recover Access</h1>
+
+        @if (_step == Step.EnterCode)
+        {
+            <p class="auth-subtitle">Enter your recovery code to reset your PIN</p>
+            @if (_error is not null) { <div class="alert-error">@_error</div> }
+            <input class="form-input" type="text" placeholder="XXXXX-XXXXX-XXXXX-XXXXX"
+                   @bind="_recoveryCode" @bind:event="oninput" style="text-transform:uppercase;letter-spacing:2px" />
+            <button class="btn btn-primary" style="width:100%;margin-top:16px" @onclick="VerifyCode">Verify Code</button>
+            <button class="btn-link" @onclick='() => Nav.NavigateTo("/pin-login")'>Back to login</button>
+        }
+        else if (_step == Step.NewPin)
+        {
+            <p class="auth-subtitle">@(!_confirming ? "Choose a new PIN" : "Confirm your new PIN")</p>
+            @if (_error is not null) { <div class="alert-error">@_error</div> }
+            <div class="pin-input-row">
+                @for (int i = 0; i < 4; i++)
+                {
+                    var idx = i;
+                    @if (!_confirming)
+                    {
+                        <input type="password" inputmode="numeric" maxlength="1"
+                               class="pin-digit @(_pin.Length > idx ? "filled" : "")"
+                               @onkeydown="@((e) => OnPinKey(e, idx))"
+                               @ref="_pinInputs[idx]" />
+                    }
+                    else
+                    {
+                        <input type="password" inputmode="numeric" maxlength="1"
+                               class="pin-digit @(_confirm.Length > idx ? "filled" : "")"
+                               @onkeydown="@((e) => OnConfirmKey(e, idx))"
+                               @ref="_confirmInputs[idx]" />
+                    }
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private enum Step { EnterCode, NewPin }
+    private Step _step = Step.EnterCode;
+    private string _recoveryCode = "";
+    private string _pin = "";
+    private string _confirm = "";
+    private string? _error;
+    private bool _confirming;
+    private ElementReference[] _pinInputs = new ElementReference[4];
+    private ElementReference[] _confirmInputs = new ElementReference[4];
+
+    private async Task VerifyCode()
+    {
+        if (string.IsNullOrWhiteSpace(_recoveryCode)) { _error = "Enter your recovery code."; return; }
+        if (!await Auth.VerifyRecoveryCodeAsync(_recoveryCode.Trim()))
+        {
+            _error = "Invalid recovery code.";
+            return;
+        }
+        _error = null;
+        _step = Step.NewPin;
+        StateHasChanged();
+        await Task.Delay(50);
+        await _pinInputs[0].FocusAsync();
+    }
+
+    private async Task OnPinKey(KeyboardEventArgs e, int idx)
+    {
+        if (e.Key.Length == 1 && e.Key[0] >= '0' && e.Key[0] <= '9' && _pin.Length < 4)
+        {
+            _pin += e.Key;
+            if (_pin.Length < 4) await _pinInputs[_pin.Length].FocusAsync();
+            else { _confirming = true; StateHasChanged(); await Task.Delay(50); await _confirmInputs[0].FocusAsync(); }
+        }
+        else if (e.Key == "Backspace" && _pin.Length > 0) _pin = _pin[..^1];
+    }
+
+    private async Task OnConfirmKey(KeyboardEventArgs e, int idx)
+    {
+        if (e.Key.Length == 1 && e.Key[0] >= '0' && e.Key[0] <= '9' && _confirm.Length < 4)
+        {
+            _confirm += e.Key;
+            if (_confirm.Length < 4) await _confirmInputs[_confirm.Length].FocusAsync();
+            else await SaveNewPin();
+        }
+        else if (e.Key == "Backspace" && _confirm.Length > 0) _confirm = _confirm[..^1];
+    }
+
+    private async Task SaveNewPin()
+    {
+        if (_pin != _confirm)
+        {
+            _error = "PINs don't match.";
+            _pin = ""; _confirm = ""; _confirming = false;
+            StateHasChanged();
+            await Task.Delay(50);
+            await _pinInputs[0].FocusAsync();
+            return;
+        }
+        await Auth.ResetPinAsync(_pin);
+        var encKey = await Auth.DeriveEncKeyAsync(_pin);
+        await Storage.SetSessionAsync("enc_key", encKey);
+        await Auth.UnlockAsync();
+        Nav.NavigateTo("/dashboard", true);
+    }
+}

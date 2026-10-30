@@ -1,33 +1,89 @@
-// Handles login and registration API calls.
-// This is a straight copy from VaultPass.Web — the HTTP logic is identical.
-// The only reason it lives in this project is namespace isolation;
-// it could theoretically be shared via a class library.
-using System.Net.Http.Json;
-using VaultPass.MAUI.Models;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace VaultPass.MAUI.Services;
 
 public class AuthService
 {
-    private readonly HttpClient _http;
-    public AuthService(HttpClient http) => _http = http;
+    private readonly SecureStorageService _storage;
 
-    // POST /api/auth/login — returns a JWT token string on success, null on failure
-    public async Task<string?> LoginAsync(string email, string hash)
+    public AuthService(SecureStorageService storage) => _storage = storage;
+
+    // Recovery code: 20 chars grouped as XXXXX-XXXXX-XXXXX-XXXXX
+    public string GenerateRecoveryCode()
     {
-        var response = await _http.PostAsJsonAsync("api/auth/login",
-            new { email, masterPasswordHash = hash });
-        if (!response.IsSuccessStatusCode) return null;
-        var raw = await response.Content.ReadAsStringAsync();
-        // The API returns the token as a quoted JSON string — strip the quotes
-        return raw.Trim('"');
+        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        var random = new byte[20];
+        RandomNumberGenerator.Fill(random);
+        var raw = new string(random.Select(b => chars[b % chars.Length]).ToArray());
+        return $"{raw[..5]}-{raw[5..10]}-{raw[10..15]}-{raw[15..20]}";
     }
 
-    // POST /api/auth/register — returns true if the account was created successfully
-    public async Task<bool> RegisterAsync(string email, string displayName, string passwordHash)
+    public async Task SaveRecoveryCodeAsync(string code)
     {
-        var response = await _http.PostAsJsonAsync("api/auth/register",
-            new RegisterRequest(email, displayName, passwordHash));
-        return response.IsSuccessStatusCode;
+        var normalized = code.Replace("-", "").ToUpperInvariant();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("vaultpass_recovery:" + normalized)));
+        await _storage.SetAsync("recovery_hash", hash);
+    }
+
+    public async Task<bool> VerifyRecoveryCodeAsync(string code)
+    {
+        var stored = await _storage.GetAsync("recovery_hash");
+        if (stored is null) return false;
+        var normalized = code.Replace("-", "").ToUpperInvariant();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("vaultpass_recovery:" + normalized)));
+        return hash == stored;
+    }
+
+    public async Task ResetPinAsync(string newPin)
+    {
+        await _storage.RemoveAsync("pin_hash");
+        await SetPinAsync(newPin);
+    }
+
+    public async Task<bool> IsPinSetAsync()
+        => await _storage.GetAsync("pin_hash") is not null;
+
+    public async Task SetPinAsync(string pin)
+    {
+        var hash = HashPin(pin);
+        await _storage.SetAsync("pin_hash", hash);
+        if (await _storage.GetAsync("vault_id") is null)
+            await _storage.SetAsync("vault_id", Guid.NewGuid().ToString());
+    }
+
+    public async Task<bool> VerifyPinAsync(string pin)
+    {
+        var stored = await _storage.GetAsync("pin_hash");
+        if (stored is null) return false;
+        return HashPin(pin) == stored;
+    }
+
+    public async Task<Guid?> GetVaultIdAsync()
+    {
+        var id = await _storage.GetAsync("vault_id");
+        return id is null ? null : Guid.Parse(id);
+    }
+
+    public async Task LockAsync()
+        => await _storage.RemoveSessionAsync("unlocked");
+
+    public async Task UnlockAsync()
+        => await _storage.SetSessionAsync("unlocked", "true");
+
+    public async Task<bool> IsUnlockedAsync()
+        => await _storage.GetSessionAsync("unlocked") == "true";
+
+    public async Task<string> DeriveEncKeyAsync(string pin)
+    {
+        var vaultId = await _storage.GetAsync("vault_id") ?? "";
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"vaultpass_enc:{pin}:{vaultId}"));
+        return Convert.ToBase64String(bytes);
+    }
+
+    private static string HashPin(string pin)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes("vaultpass_pin:" + pin));
+        return Convert.ToHexString(bytes);
     }
 }

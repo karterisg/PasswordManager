@@ -1,19 +1,70 @@
-@* This is the Blazor Router — identical to the Web project.
-   It reads the current URL and decides which Page component to render.
-   e.g. /login → Login.razor, /dashboard → Dashboard.razor
+@using Microsoft.AspNetCore.Components.Routing
+@inject AuthService Auth
+@inject NavigationManager Nav
 
-   DefaultLayout wraps every page in MainLayout.razor.
-   Our MainLayout is intentionally empty (just @Body) because each page
-   manages its own header/topbar. *@
+@if (!_initialized)
+{
+    <div style="display:flex;align-items:center;justify-content:center;height:100vh;background:var(--bg,#0a0a0f);">
+        <div style="color:#6b7280;font-family:sans-serif;">Loading…</div>
+    </div>
+}
+else if (!_pinSet)
+{
+    <VaultPass.MAUI.Pages.PinSetup />
+}
+else if (!_unlocked)
+{
+    <VaultPass.MAUI.Pages.PinLogin />
+}
+else
+{
+    <Router AppAssembly="@typeof(Routes).Assembly">
+        <Found Context="routeData">
+            <RouteView RouteData="@routeData" DefaultLayout="@typeof(Shared.MainLayout)" />
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <LayoutView Layout="@typeof(Shared.MainLayout)">
+                <p>Page not found.</p>
+            </LayoutView>
+        </NotFound>
+    </Router>
+}
 
-<Router AppAssembly="@typeof(Routes).Assembly">
-    <Found Context="routeData">
-        <RouteView RouteData="@routeData" DefaultLayout="@typeof(Shared.MainLayout)" />
-        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
-    </Found>
-    <NotFound>
-        <LayoutView Layout="@typeof(Shared.MainLayout)">
-            <p>Page not found.</p>
-        </LayoutView>
-    </NotFound>
-</Router>
+@code {
+    private bool _initialized;
+    private bool _pinSet;
+    private bool _unlocked;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Wipe stale SecureStorage on first run of this version
+        var markerPath = Path.Combine(FileSystem.AppDataDirectory, "install_v4.marker");
+        if (!File.Exists(markerPath))
+        {
+            try
+            {
+                var settingsDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "karterisg", "com.karterisg.vaultpass", "Settings");
+                var dat = Path.Combine(settingsDir, "securestorage.dat");
+                if (File.Exists(dat)) File.Delete(dat);
+            }
+            catch { }
+            SecureStorage.Default.RemoveAll();
+            File.WriteAllText(markerPath, "1");
+        }
+
+        _pinSet = await Auth.IsPinSetAsync();
+        _unlocked = await Auth.IsUnlockedAsync();
+        _initialized = true;
+    }
+
+    // Called by PinSetup/PinLogin after successful auth to show dashboard
+    public void ShowDashboard()
+    {
+        _pinSet = true;
+        _unlocked = true;
+        Nav.NavigateTo("/dashboard", true);
+    }
+}
