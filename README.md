@@ -53,7 +53,7 @@ A related issue: `SecureStorage.Default.RemoveAll()` on Windows does not reliabl
 
 ### The Chrome Extension
 
-![VaultPass Extension](docs/screenshots/extension.jpg)
+<img src="docs/screenshots/extension.jpg" width="320" alt="VaultPass Extension" />
 
 The extension is Manifest V3 and has three parts: a background service worker, a content script, and a popup.
 
