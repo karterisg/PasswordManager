@@ -100,7 +100,28 @@ The `Dockerfile` produces a self-contained .NET 10 image with no credentials bak
 
 ### Windows
 
-The API runs as a Task Scheduler background task that starts at login. The entry is named `VaultPassAPI` and points to the published executable.
+The API runs as a Task Scheduler entry named `VaultPassAPI` that starts automatically at user login. First publish it as a self-contained executable:
+
+```powershell
+dotnet publish src/VaultPass.API/VaultPass.API.csproj -c Release -r win-x64 --self-contained -o publish/VaultPass.API
+```
+
+Then register the Task Scheduler entry (run PowerShell as Administrator):
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "D:\desktop\VaultPass\publish\VaultPass.API\VaultPass.API.exe"
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0
+Register-ScheduledTask -TaskName "VaultPassAPI" -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest
+```
+
+The API will start automatically on every login and run in the background. To start it immediately without logging out:
+
+```powershell
+Start-ScheduledTask -TaskName "VaultPassAPI"
+```
+
+The API listens on `http://localhost:5243`. Place the `appsettings.json` next to the executable with your connection string and JWT secret — never commit this file.
 
 For the web app: `dotnet run --project src/VaultPass.Web` → `http://localhost:5002`.
 
