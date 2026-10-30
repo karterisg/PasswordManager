@@ -174,9 +174,16 @@ $("btn-login").addEventListener("click", async () => {
   $("login-error").style.display = "none";
   if (!email || !password) { showError("Please enter email and password."); return; }
   $("btn-login").textContent = "Signing in...";
-  const res = await chrome.runtime.sendMessage({ type: "LOGIN", email, password });
+  // Retry once — service worker may be sleeping on first message
+  let res = null;
+  for (let i = 0; i < 2; i++) {
+    try {
+      res = await chrome.runtime.sendMessage({ type: "LOGIN", email, password });
+      if (res) break;
+    } catch { await new Promise(r => setTimeout(r, 300)); }
+  }
   $("btn-login").textContent = "Sign In";
-  if (res.ok) showVault();
+  if (res?.ok) showVault();
   else showError("Invalid email or password.");
 });
 
