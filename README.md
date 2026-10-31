@@ -133,6 +133,8 @@ The Chrome extension loads unpacked from `src/VaultPass.Extension` via `chrome:/
 
 The MAUI Windows desktop app publishes to a self-contained EXE: `dotnet publish src/VaultPass.MAUI/VaultPass.MAUI.csproj -f net10.0-windows10.0.19041.0 -c Release`.
 
+Download the pre-built app: [VaultPass-Windows-x64.zip](https://github.com/karterisg/PasswordManager/releases/download/v1.1/VaultPass-Windows-x64.zip)
+
 ### Android
 
 Build and sign the APK:
@@ -143,15 +145,13 @@ dotnet publish src/VaultPass.MAUI/VaultPass.MAUI.csproj -f net10.0-android -c Re
 
 The signed APK ends up in `bin/Release/net10.0-android/publish/`. Install with `adb install` or side-load directly. The mobile app is fully offline so no API setup is needed on the device.
 
+Download the pre-built APK: [VaultPass-Android.apk](https://github.com/karterisg/PasswordManager/releases/download/v1.1/VaultPass-Android.apk)
+
 ### iOS / macOS
 
 Both targets require a Mac with Xcode and an Apple Developer account. Clone the repo on a Mac and run:
 
-| Platform | Download |
-|----------|----------|
-| macOS | [VaultPass.app](https://github.com/karterisg/PasswordManager/releases/download/v1.1/VaultPass-macOS.zip) |
-| Windows | [VaultPass-Windows-x64.zip](https://github.com/karterisg/PasswordManager/releases/download/v1.1/VaultPass-Windows-x64.zip) |
-| Android | [VaultPass-Android.apk](https://github.com/karterisg/PasswordManager/releases/download/v1.1/VaultPass-Android.apk) |
+Download the pre-built macOS app: [VaultPass.app](https://github.com/karterisg/PasswordManager/releases/download/v1.1/VaultPass-macOS.zip)
 
 Or build it yourself:
 
