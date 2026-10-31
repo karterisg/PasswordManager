@@ -1,15 +1,5 @@
 ﻿# VaultPass
 
-## Downloads
-
-| Platform | Link |
-|----------|------|
-| macOS | [VaultPass.app](https://github.com/karterisg/PasswordManager/releases/download/v1.1/VaultPass-macOS.zip) |
-| Windows | _coming soon_ |
-| Android | _coming soon_ |
-
----
-
 VaultPass is a local-first password manager I built from scratch. The core idea is that your credentials never leave devices you control in plaintext, and you are never dependent on a third-party cloud. Depending on how you run it, the app works completely offline on your phone, through a web interface backed by your own server, or as a Chrome extension that autofills credentials on any site.
 
 There are two distinct usage modes:
@@ -156,6 +146,10 @@ The signed APK ends up in `bin/Release/net10.0-android/publish/`. Install with `
 ### iOS / macOS
 
 Both targets require a Mac with Xcode and an Apple Developer account. Clone the repo on a Mac and run:
+
+Download the pre-built app: [VaultPass.app](https://github.com/karterisg/PasswordManager/releases/download/v1.1/VaultPass-macOS.zip)
+
+Or build it yourself:
 
 ```bash
 # macOS
