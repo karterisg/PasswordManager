@@ -147,7 +147,11 @@ The signed APK ends up in `bin/Release/net10.0-android/publish/`. Install with `
 
 Both targets require a Mac with Xcode and an Apple Developer account. Clone the repo on a Mac and run:
 
-Download the pre-built app: [VaultPass.app](https://github.com/karterisg/PasswordManager/releases/download/v1.1/VaultPass-macOS.zip)
+| Platform | Download |
+|----------|----------|
+| macOS | [VaultPass.app](https://github.com/karterisg/PasswordManager/releases/download/v1.1/VaultPass-macOS.zip) |
+| Windows | [VaultPass-Windows-x64.zip](https://github.com/karterisg/PasswordManager/releases/download/v1.1/VaultPass-Windows-x64.zip) |
+| Android | [VaultPass-Android.apk](https://github.com/karterisg/PasswordManager/releases/download/v1.1/VaultPass-Android.apk) |
 
 Or build it yourself:
 
